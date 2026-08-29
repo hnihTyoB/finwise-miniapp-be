@@ -22,9 +22,9 @@ export const zaloLoginSchema = z
     name: z.string().optional(),
     avatar: z.string().optional(),
   })
-  .refine((data) => data.phoneToken || data.phoneNumber, {
-    message: 'Either phoneToken or phoneNumber must be provided',
-    path: ['phoneToken'],
+  .refine((data) => data.phoneToken || data.phoneNumber || data.zaloId, {
+    message: 'Either phoneToken, phoneNumber, or zaloId must be provided',
+    path: ['accessToken'],
   });
 
 export const refreshSchema = z.object({
@@ -135,4 +135,3 @@ export const sessionQuerySchema = z.object({
 export const revokeOtherSessionsSchema = z.object({
   refreshToken: z.string().optional(),
 });
-

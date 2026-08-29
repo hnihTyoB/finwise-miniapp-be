@@ -480,56 +480,60 @@ export class AuthService {
       console.warn('[ZaloAuth] fetchZaloProfile caught error:', err);
     }
 
-    // 2. Lấy và chuẩn hóa số điện thoại (từ phoneToken hoặc phoneNumber)
+    // 2. Lấy và chuẩn hóa số điện thoại (từ phoneToken hoặc phoneNumber nếu có thể giải mã)
     let resolvedPhone = dto.phoneNumber;
 
     if (dto.phoneToken) {
-      const phoneResponse = await this.fetchZaloPhoneNumber(accessToken, dto.phoneToken, appSecret);
-      if (
-        !phoneResponse ||
-        (phoneResponse.error !== undefined && phoneResponse.error !== 0) ||
-        !phoneResponse.data?.number
-      ) {
-        console.error('[ZaloAuth] fetchZaloPhoneNumber failed:', phoneResponse);
-        throw new AppError(
-          phoneResponse?.message ? `Zalo Phone Error: ${phoneResponse.message}` : 'Failed to decode phone number from Zalo token',
-          401,
-          ERROR_CODE.INVALID_CREDENTIALS,
-        );
+      try {
+        const phoneResponse = await this.fetchZaloPhoneNumber(accessToken, dto.phoneToken, appSecret);
+        if (phoneResponse && phoneResponse.data?.number) {
+          resolvedPhone = phoneResponse.data.number;
+        } else if (phoneResponse?.error === -501) {
+          console.warn('[ZaloAuth] Zalo Phone API limited by IP location (-501). Authenticating via Zalo ID.');
+        } else if (phoneResponse && phoneResponse.error !== undefined && phoneResponse.error !== 0) {
+          console.warn('[ZaloAuth] fetchZaloPhoneNumber returned error:', phoneResponse);
+        }
+      } catch (err) {
+        console.warn('[ZaloAuth] fetchZaloPhoneNumber caught error:', err);
       }
-      resolvedPhone = phoneResponse.data.number;
     }
 
-    if (!resolvedPhone) {
-      throw new AppError('Phone number is required', 400, ERROR_CODE.VALIDATION_ERROR);
+    if (resolvedPhone) {
+      // Chuẩn hóa số điện thoại: +84... hoặc 84... -> 0...
+      resolvedPhone = resolvedPhone.replace(/^\+84/, '0').replace(/^84/, '0');
     }
 
-    // Chuẩn hóa số điện thoại: +84... hoặc 84... -> 0...
-    resolvedPhone = resolvedPhone.replace(/^\+84/, '0').replace(/^84/, '0');
-
+    // Đảm bảo có Zalo ID làm mã định danh
     if (!zaloId) {
-      zaloId = `zalo_${resolvedPhone}`;
+      if (resolvedPhone) {
+        zaloId = `zalo_${resolvedPhone}`;
+      } else {
+        throw new AppError('Unable to identify Zalo user. Please grant basic permissions.', 400, ERROR_CODE.VALIDATION_ERROR);
+      }
     }
 
-    // 3. Tìm hoặc tạo user theo SĐT
-    let user = await this.repository.findByPhone(resolvedPhone);
+    // 3. Tìm hoặc tạo user
+    // A. Tìm theo liên kết mạng xã hội Zalo ID trước
+    let user: any = await this.repository.findBySocial('zalo', zaloId);
 
-    if (user) {
-      // User đã tồn tại — liên kết Zalo ID nếu chưa có
-      const existing = await this.repository.findBySocial('zalo', zaloId);
-      if (!existing) {
+    // B. Nếu chưa tìm thấy theo Zalo ID và có SĐT, tìm theo SĐT
+    if (!user && resolvedPhone) {
+      user = await this.repository.findByPhone(resolvedPhone);
+      if (user) {
         await this.repository.linkSocialAccount(user.id, 'zalo', zaloId);
       }
-    } else {
-      // User chưa tồn tại — tạo mới từ Zalo profile
+    }
+
+    // C. Nếu user chưa tồn tại, tạo mới
+    if (!user) {
       const role = await this.repository.findRoleByName(SYSTEM_ROLES.USER);
       if (!role) {
         throw new AppError('Default role not found', 500, ERROR_CODE.INTERNAL_SERVER_ERROR);
       }
       user = await this.repository.createSocialUser({
-        fullName: zaloName || undefined,
+        fullName: zaloName || 'Người dùng Zalo',
         avatarUrl: zaloAvatarUrl || undefined,
-        phoneNumber: resolvedPhone,
+        phoneNumber: resolvedPhone || undefined,
         roleId: role.id,
         provider: 'zalo',
         providerUserId: zaloId,
