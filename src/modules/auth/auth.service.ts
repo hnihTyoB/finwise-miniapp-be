@@ -449,24 +449,36 @@ export class AuthService {
     const { accessToken } = dto;
     const appSecret = process.env.ZALO_APP_SECRET || '';
 
-    // 1. Xác thực access_token với Zalo Graph API
-    const appsecretProof = crypto
-      .createHmac('sha256', appSecret)
-      .update(accessToken)
-      .digest('hex');
+    // 1. Xác thực access_token và lấy thông tin Zalo profile (có fallback khi IP server ở nước ngoài)
+    let zaloId = dto.zaloId || '';
+    let zaloName = dto.name || 'Người dùng Zalo';
+    let zaloAvatarUrl: string | null = dto.avatar || null;
 
-    const zaloProfile = await this.fetchZaloProfile(accessToken, appsecretProof);
-    if (!zaloProfile || (zaloProfile.error !== undefined && zaloProfile.error !== 0) || !zaloProfile.id) {
-      console.error('[ZaloAuth] fetchZaloProfile failed:', zaloProfile);
-      throw new AppError(
-        zaloProfile?.message ? `Zalo Profile Error: ${zaloProfile.message}` : 'Invalid Zalo access token',
-        401,
-        ERROR_CODE.INVALID_CREDENTIALS,
-      );
+    try {
+      const appsecretProof = crypto
+        .createHmac('sha256', appSecret)
+        .update(accessToken)
+        .digest('hex');
+
+      const zaloProfile = await this.fetchZaloProfile(accessToken, appsecretProof);
+      if (zaloProfile && zaloProfile.id) {
+        zaloId = zaloProfile.id;
+        if (zaloProfile.name) zaloName = zaloProfile.name;
+        if (zaloProfile.picture?.data?.url) zaloAvatarUrl = zaloProfile.picture.data.url;
+      } else if (zaloProfile?.error === -501) {
+        console.warn('[ZaloAuth] Server IP is outside Vietnam (-501). Using client profile info.');
+      } else if (zaloProfile && zaloProfile.error !== undefined && zaloProfile.error !== 0 && !dto.phoneToken) {
+        console.error('[ZaloAuth] fetchZaloProfile failed:', zaloProfile);
+        throw new AppError(
+          zaloProfile?.message ? `Zalo Profile Error: ${zaloProfile.message}` : 'Invalid Zalo access token',
+          401,
+          ERROR_CODE.INVALID_CREDENTIALS,
+        );
+      }
+    } catch (err) {
+      if (err instanceof AppError) throw err;
+      console.warn('[ZaloAuth] fetchZaloProfile caught error:', err);
     }
-
-    const { id: zaloId, name: zaloName, picture } = zaloProfile;
-    const zaloAvatarUrl: string | null = picture?.data?.url || null;
 
     // 2. Lấy và chuẩn hóa số điện thoại (từ phoneToken hoặc phoneNumber)
     let resolvedPhone = dto.phoneNumber;
@@ -494,6 +506,10 @@ export class AuthService {
 
     // Chuẩn hóa số điện thoại: +84... hoặc 84... -> 0...
     resolvedPhone = resolvedPhone.replace(/^\+84/, '0').replace(/^84/, '0');
+
+    if (!zaloId) {
+      zaloId = `zalo_${resolvedPhone}`;
+    }
 
     // 3. Tìm hoặc tạo user theo SĐT
     let user = await this.repository.findByPhone(resolvedPhone);

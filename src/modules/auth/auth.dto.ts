@@ -7,6 +7,9 @@ export interface ZaloLoginDto {
   accessToken: string;   // Zalo access_token từ getAccessToken() SDK
   phoneToken?: string;   // Mã token SĐT từ getPhoneNumber() SDK (giải mã phía server)
   phoneNumber?: string;  // SĐT thực trực tiếp (cho test/fallback)
+  zaloId?: string;       // User ID từ getUserInfo SDK client
+  name?: string;         // Tên user từ getUserInfo SDK client
+  avatar?: string;       // Avatar từ getUserInfo SDK client
 }
 
 export interface ZaloPhoneResponse {

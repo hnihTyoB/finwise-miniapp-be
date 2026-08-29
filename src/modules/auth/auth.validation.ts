@@ -18,6 +18,9 @@ export const zaloLoginSchema = z
       .string()
       .regex(/^(0[3|5|7|8|9])+([0-9]{8})$/, 'Invalid Vietnamese phone number format')
       .optional(),
+    zaloId: z.string().optional(),
+    name: z.string().optional(),
+    avatar: z.string().optional(),
   })
   .refine((data) => data.phoneToken || data.phoneNumber, {
     message: 'Either phoneToken or phoneNumber must be provided',
