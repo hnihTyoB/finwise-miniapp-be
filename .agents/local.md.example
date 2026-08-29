@@ -1,0 +1,14 @@
+# Local Agent Notes
+
+Copy file này thành `.agents/local.md` để thêm quy ước riêng cho máy của bạn.
+`local.md` không được commit và được đọc sau các quy tắc chung.
+
+Ví dụ các nội dung phù hợp:
+
+- Lệnh khởi động database local.
+- Tên container hoặc port riêng trên máy.
+- Công cụ kiểm tra bổ sung đã cài local.
+- Cách trình bày phản hồi cá nhân.
+
+Không đặt secret, token, mật khẩu hoặc nội dung `.env` ở đây.
+

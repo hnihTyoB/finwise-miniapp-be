@@ -1,0 +1,10 @@
+name = "finwise-miniapp-be"
+main = "src/worker.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Cloudflare Hyperdrive kết nối Supabase Postgres
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "2e364c7ca4ef490da2e03e40a8b4cb32"
+localConnectionString = "postgresql://postgres.defnmzktqqqucspyjbvb:Finwise2026Project@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres"

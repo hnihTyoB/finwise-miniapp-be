@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.env
+*.log
+storage/exports/*
+!storage/exports/.gitkeep
+storage/receipts/*
+!storage/receipts/.gitkeep
+.DS_Store
+.agents/local.md
+.wrangler/
+.dev.vars
+
