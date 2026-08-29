@@ -75,6 +75,7 @@ describe('Zalo Auth Integration Tests', () => {
 
   describe('Successful Zalo Login Flow', () => {
     let mockFetchZalo: jest.SpyInstance;
+    let mockFetchPhone: jest.SpyInstance;
 
     beforeEach(() => {
       // Mock fetchZaloProfile on AuthService prototype
@@ -89,18 +90,28 @@ describe('Zalo Auth Integration Tests', () => {
           },
         },
       });
+
+      // Mock fetchZaloPhoneNumber on AuthService prototype
+      mockFetchPhone = jest.spyOn(AuthService.prototype as any, 'fetchZaloPhoneNumber').mockResolvedValue({
+        data: {
+          number: '84987654321', // Zalo format with 84
+        },
+        error: 0,
+        message: 'Success',
+      });
     });
 
     afterEach(() => {
       mockFetchZalo.mockRestore();
+      mockFetchPhone.mockRestore();
     });
 
-    it('should create new user and return tokens when phone does not exist yet', async () => {
+    it('should create new user and return tokens when phone does not exist yet (using phoneToken)', async () => {
       const res = await request(app)
         .post('/api/v1/auth/zalo-login')
         .send({
           accessToken: 'valid_mock_token_123',
-          phoneNumber: testPhone,
+          phoneToken: 'valid_phone_token_abc',
         });
 
       expect(res.status).toBe(200);
@@ -129,12 +140,12 @@ describe('Zalo Auth Integration Tests', () => {
       expect(dbUser?.socialAccounts[0].providerUserId).toBe(testZaloId);
     });
 
-    it('should login existing user and return tokens without duplicate creation', async () => {
+    it('should login existing user and return tokens without duplicate creation (using phoneToken)', async () => {
       const res = await request(app)
         .post('/api/v1/auth/zalo-login')
         .send({
           accessToken: 'valid_mock_token_123',
-          phoneNumber: testPhone,
+          phoneToken: 'valid_phone_token_abc',
         });
 
       expect(res.status).toBe(200);

@@ -10,13 +10,19 @@ export const loginSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 });
 
-export const zaloLoginSchema = z.object({
-  accessToken: z.string().min(1, 'Zalo access token is required'),
-  phoneNumber: z
-    .string()
-    .min(1, 'Phone number is required')
-    .regex(/^(0[3|5|7|8|9])+([0-9]{8})$/, 'Invalid Vietnamese phone number format'),
-});
+export const zaloLoginSchema = z
+  .object({
+    accessToken: z.string().min(1, 'Zalo access token is required'),
+    phoneToken: z.string().min(1, 'Phone token must not be empty').optional(),
+    phoneNumber: z
+      .string()
+      .regex(/^(0[3|5|7|8|9])+([0-9]{8})$/, 'Invalid Vietnamese phone number format')
+      .optional(),
+  })
+  .refine((data) => data.phoneToken || data.phoneNumber, {
+    message: 'Either phoneToken or phoneNumber must be provided',
+    path: ['phoneToken'],
+  });
 
 export const refreshSchema = z.object({
   refreshToken: z.string().optional(),

@@ -5,7 +5,16 @@ export interface LoginDto {
 
 export interface ZaloLoginDto {
   accessToken: string;   // Zalo access_token từ getAccessToken() SDK
-  phoneNumber: string;   // SĐT thực từ getPhoneNumber() SDK
+  phoneToken?: string;   // Mã token SĐT từ getPhoneNumber() SDK (giải mã phía server)
+  phoneNumber?: string;  // SĐT thực trực tiếp (cho test/fallback)
+}
+
+export interface ZaloPhoneResponse {
+  data?: {
+    number?: string;
+  };
+  error?: number;
+  message?: string;
 }
 
 export interface ZaloProfileResponse {

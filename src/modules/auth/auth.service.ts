@@ -5,7 +5,7 @@ import { AuthRepository } from './auth.repository';
 import { AppError } from '../../common/errors/app-error';
 import { ERROR_CODE } from '../../common/errors/error-code';
 import { jwtConfig } from '../../config/jwt.config';
-import { LoginDto, ZaloLoginDto, ZaloProfileResponse, LoginResponseDto, AuthTokensDto, MeDto, RegisterDto, UpdateProfileDto, UpdateAvatarDto, UpdatePasswordDto, ForgotPasswordDto, ResetPasswordDto, ResendVerificationDto, SessionQueryDto, SessionsResponseDto } from './auth.dto';
+import { LoginDto, ZaloLoginDto, ZaloProfileResponse, ZaloPhoneResponse, LoginResponseDto, AuthTokensDto, MeDto, RegisterDto, UpdateProfileDto, UpdateAvatarDto, UpdatePasswordDto, ForgotPasswordDto, ResetPasswordDto, ResendVerificationDto, SessionQueryDto, SessionsResponseDto } from './auth.dto';
 import https from 'https';
 import { MailService } from '../../common/services/mail.service';
 import { generateDeviceHash, parseUserAgent } from '../../common/helpers/user-agent.helper';
@@ -446,10 +446,10 @@ export class AuthService {
     dto: ZaloLoginDto,
     metadata?: { userAgent?: string; ipAddress?: string },
   ): Promise<LoginResponseDto> {
-    const { accessToken, phoneNumber } = dto;
+    const { accessToken } = dto;
+    const appSecret = process.env.ZALO_APP_SECRET || '';
 
     // 1. Xác thực access_token với Zalo Graph API
-    const appSecret = process.env.ZALO_APP_SECRET || '';
     const appsecretProof = crypto
       .createHmac('sha256', appSecret)
       .update(accessToken)
@@ -467,8 +467,30 @@ export class AuthService {
     const { id: zaloId, name: zaloName, picture } = zaloProfile;
     const zaloAvatarUrl: string | null = picture?.data?.url || null;
 
-    // 2. Tìm hoặc tạo user theo SĐT
-    let user = await this.repository.findByPhone(phoneNumber);
+    // 2. Lấy và chuẩn hóa số điện thoại (từ phoneToken hoặc phoneNumber)
+    let resolvedPhone = dto.phoneNumber;
+
+    if (dto.phoneToken) {
+      const phoneResponse = await this.fetchZaloPhoneNumber(accessToken, dto.phoneToken, appSecret);
+      if (!phoneResponse || phoneResponse.error !== 0 || !phoneResponse.data?.number) {
+        throw new AppError(
+          phoneResponse?.message || 'Failed to decode phone number from Zalo token',
+          401,
+          ERROR_CODE.INVALID_CREDENTIALS,
+        );
+      }
+      resolvedPhone = phoneResponse.data.number;
+    }
+
+    if (!resolvedPhone) {
+      throw new AppError('Phone number is required', 400, ERROR_CODE.VALIDATION_ERROR);
+    }
+
+    // Chuẩn hóa số điện thoại: +84... hoặc 84... -> 0...
+    resolvedPhone = resolvedPhone.replace(/^\+84/, '0').replace(/^84/, '0');
+
+    // 3. Tìm hoặc tạo user theo SĐT
+    let user = await this.repository.findByPhone(resolvedPhone);
 
     if (user) {
       // User đã tồn tại — liên kết Zalo ID nếu chưa có
@@ -485,7 +507,7 @@ export class AuthService {
       user = await this.repository.createSocialUser({
         fullName: zaloName || undefined,
         avatarUrl: zaloAvatarUrl || undefined,
-        phoneNumber,
+        phoneNumber: resolvedPhone,
         roleId: role.id,
         provider: 'zalo',
         providerUserId: zaloId,
@@ -575,6 +597,38 @@ export class AuthService {
             resolve(JSON.parse(data) as ZaloProfileResponse);
           } catch {
             reject(new Error('Failed to parse Zalo API response'));
+          }
+        });
+      });
+      req.on('error', reject);
+      req.end();
+    });
+  }
+
+  private fetchZaloPhoneNumber(
+    accessToken: string,
+    phoneToken: string,
+    appSecret: string,
+  ): Promise<ZaloPhoneResponse> {
+    return new Promise((resolve, reject) => {
+      const options = {
+        hostname: 'graph.zalo.me',
+        path: '/v2.0/me/info',
+        method: 'GET',
+        headers: {
+          access_token: accessToken,
+          code: phoneToken,
+          secret_key: appSecret,
+        },
+      };
+      const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => (data += chunk));
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(data) as ZaloPhoneResponse);
+          } catch {
+            reject(new Error('Failed to parse Zalo Phone API response'));
           }
         });
       });
