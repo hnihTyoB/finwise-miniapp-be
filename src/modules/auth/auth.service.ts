@@ -456,9 +456,10 @@ export class AuthService {
       .digest('hex');
 
     const zaloProfile = await this.fetchZaloProfile(accessToken, appsecretProof);
-    if (!zaloProfile || zaloProfile.error !== 0) {
+    if (!zaloProfile || (zaloProfile.error !== undefined && zaloProfile.error !== 0) || !zaloProfile.id) {
+      console.error('[ZaloAuth] fetchZaloProfile failed:', zaloProfile);
       throw new AppError(
-        'Invalid Zalo access token or Zalo API error',
+        zaloProfile?.message ? `Zalo Profile Error: ${zaloProfile.message}` : 'Invalid Zalo access token',
         401,
         ERROR_CODE.INVALID_CREDENTIALS,
       );
@@ -472,9 +473,14 @@ export class AuthService {
 
     if (dto.phoneToken) {
       const phoneResponse = await this.fetchZaloPhoneNumber(accessToken, dto.phoneToken, appSecret);
-      if (!phoneResponse || phoneResponse.error !== 0 || !phoneResponse.data?.number) {
+      if (
+        !phoneResponse ||
+        (phoneResponse.error !== undefined && phoneResponse.error !== 0) ||
+        !phoneResponse.data?.number
+      ) {
+        console.error('[ZaloAuth] fetchZaloPhoneNumber failed:', phoneResponse);
         throw new AppError(
-          phoneResponse?.message || 'Failed to decode phone number from Zalo token',
+          phoneResponse?.message ? `Zalo Phone Error: ${phoneResponse.message}` : 'Failed to decode phone number from Zalo token',
           401,
           ERROR_CODE.INVALID_CREDENTIALS,
         );
