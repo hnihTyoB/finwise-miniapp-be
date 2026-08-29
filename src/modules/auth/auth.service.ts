@@ -503,12 +503,16 @@ export class AuthService {
       resolvedPhone = resolvedPhone.replace(/^\+84/, '0').replace(/^84/, '0');
     }
 
-    // Đảm bảo có Zalo ID làm mã định danh
+    // Đảm bảo luôn có Zalo ID làm mã định danh tài khoản
     if (!zaloId) {
       if (resolvedPhone) {
         zaloId = `zalo_${resolvedPhone}`;
+      } else if (dto.phoneToken) {
+        const tokenHash = crypto.createHash('sha256').update(dto.phoneToken).digest('hex').substring(0, 16);
+        zaloId = `zalo_tok_${tokenHash}`;
       } else {
-        throw new AppError('Unable to identify Zalo user. Please grant basic permissions.', 400, ERROR_CODE.VALIDATION_ERROR);
+        const accHash = crypto.createHash('sha256').update(accessToken).digest('hex').substring(0, 16);
+        zaloId = `zalo_acc_${accHash}`;
       }
     }
 
