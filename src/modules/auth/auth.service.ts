@@ -567,11 +567,11 @@ export class AuthService {
         }
       }
 
-      // Cập nhật thêm tên hoặc avatar nếu tài khoản hiện tại chưa có
-      if (!user.fullName && zaloName) {
+      // Cập nhật tên nếu có tên Zalo hợp lệ (khác placeholder) và user chưa có hoặc đang là placeholder
+      if (zaloName && zaloName !== 'Người dùng Zalo' && (!user.fullName || user.fullName === 'Người dùng Zalo' || user.fullName !== zaloName)) {
         updateData.fullName = zaloName;
       }
-      if (!user.avatarUrl && zaloAvatarUrl) {
+      if (zaloAvatarUrl && (!user.avatarUrl || user.avatarUrl !== zaloAvatarUrl)) {
         updateData.avatarUrl = zaloAvatarUrl;
       }
 
