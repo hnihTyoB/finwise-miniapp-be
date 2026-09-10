@@ -4,9 +4,27 @@ import {
   UpdateNotificationSettingDto,
 } from './notification.dto';
 import { NotificationService } from './notification.service';
+import { notificationStreamService } from './notification-stream.service';
 
 export class NotificationController {
   private readonly service = new NotificationService();
+
+  stream = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      });
+      if (typeof res.flushHeaders === 'function') {
+        res.flushHeaders();
+      }
+      await notificationStreamService.registerClient(req.user.id, res, req);
+    } catch (error) {
+      next(error);
+    }
+  };
 
   findAll = async (req: Request, res: Response, next: NextFunction) => {
     try {

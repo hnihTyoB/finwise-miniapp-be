@@ -4893,6 +4893,36 @@ export const swaggerSpec = {
         },
       },
     },
+    '/notifications/stream': {
+      get: {
+        tags: ['Notifications'],
+        summary: 'Stream realtime notifications and unread count via Server-Sent Events (SSE)',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'token',
+            in: 'query',
+            description: 'Access token for EventSource authentication when custom headers are not supported',
+            required: false,
+            schema: { type: 'string' },
+          },
+        ],
+        responses: {
+          200: {
+            description: 'Server-Sent Events stream emitting "connected", "unread_count", and "notification" events',
+            content: {
+              'text/event-stream': {
+                schema: {
+                  type: 'string',
+                  example: 'event: unread_count\ndata: {"count": 3}\n\n',
+                },
+              },
+            },
+          },
+          401: { $ref: '#/components/responses/Unauthorized' },
+        },
+      },
+    },
     '/notifications/unread-count': {
       get: {
         tags: ['Notifications'],

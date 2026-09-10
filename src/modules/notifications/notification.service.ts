@@ -29,6 +29,7 @@ import {
 
 import { AnomalyService } from '../anomalies/anomaly.service';
 import { webhookService } from '../webhooks/webhook.service';
+import { notificationStreamService } from './notification-stream.service';
 
 const GOAL_NEAR_TARGET_PERCENT = new Prisma.Decimal(80);
 const GOAL_DUE_SOON_DAYS = 7;
@@ -57,18 +58,43 @@ export class NotificationService {
 
   async markRead(userId: string, id: string) {
     const notification = await this.findOwned(userId, id);
-    return notification.readAt
+    const updated = notification.readAt
       ? notification
-      : this.repository.markRead(notification.id);
+      : await this.repository.markRead(notification.id);
+
+    if (!notification.readAt) {
+      try {
+        const count = await this.repository.unreadCount(userId);
+        notificationStreamService.broadcastToUser(userId, 'unread_count', { count });
+      } catch (err) {
+        console.error('Failed to broadcast unread_count on markRead:', err);
+      }
+    }
+    return updated;
   }
 
   async markAllRead(userId: string) {
-    return this.repository.markAllRead(userId);
+    const result = await this.repository.markAllRead(userId);
+    try {
+      notificationStreamService.broadcastToUser(userId, 'unread_count', { count: 0 });
+    } catch (err) {
+      console.error('Failed to broadcast unread_count on markAllRead:', err);
+    }
+    return result;
   }
 
   async remove(userId: string, id: string) {
-    await this.findOwned(userId, id);
-    return this.repository.remove(id);
+    const notification = await this.findOwned(userId, id);
+    const result = await this.repository.remove(id);
+    if (!notification.readAt) {
+      try {
+        const count = await this.repository.unreadCount(userId);
+        notificationStreamService.broadcastToUser(userId, 'unread_count', { count });
+      } catch (err) {
+        console.error('Failed to broadcast unread_count on remove:', err);
+      }
+    }
+    return result;
   }
 
   async getSetting(userId: string): Promise<NotificationSettingDto> {
@@ -85,7 +111,17 @@ export class NotificationService {
     if (!this.isEnabled(input.type, setting)) {
       return null;
     }
-    return this.repository.createIfAbsent(input, setting.channels);
+    const created = await this.repository.createIfAbsent(input, setting.channels);
+    if (created) {
+      try {
+        notificationStreamService.broadcastToUser(input.userId, 'notification', created);
+        const count = await this.repository.unreadCount(input.userId);
+        notificationStreamService.broadcastToUser(input.userId, 'unread_count', { count });
+      } catch (err) {
+        console.error('Failed to broadcast notification/unread_count on create:', err);
+      }
+    }
+    return created;
   }
 
   async getChannelsForType(type: NotificationType, userId: string) {

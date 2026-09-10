@@ -51,6 +51,9 @@ File này chỉ lưu sự thật và quyết định dài hạn giúp các phiê
 - Notification dùng inbox theo ownership và database-backed delivery outbox với khóa chống
   trùng theo sự kiện. Kênh mặc định là `IN_APP`; email dùng SMTP hiện có, còn Zalo/push giữ
   trạng thái delivery riêng để bổ sung provider adapter sau.
+  Thông báo in-app và số lượng chưa đọc (`unread-count`) được phát thời gian thực tới client qua
+  Server-Sent Events (`GET /api/v1/notifications/stream`), quản lý kết nối và phát sóng bởi
+  `NotificationStreamService` (hỗ trợ Redis Pub/Sub đa instance và in-memory fallback).
 - Reminder hỗ trợ `ONCE`, `DAILY`, `WEEKLY`, `MONTHLY`, `YEARLY`, có khoảng lặp và ngày kết
   thúc. Worker nền trong process xử lý reminder, cảnh báo ngân sách/mục tiêu và retry delivery;
   có thể tắt hoặc chỉnh chu kỳ bằng các biến `NOTIFICATION_*`.

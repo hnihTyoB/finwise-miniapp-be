@@ -19,6 +19,7 @@ const controller = new NotificationController();
 router.use(authMiddleware);
 
 router.get('/', requirePermission(PERMISSIONS.NOTIFICATION_READ), validate(findNotificationsSchema, 'query'), controller.findAll);
+router.get('/stream', requirePermission(PERMISSIONS.NOTIFICATION_READ), controller.stream);
 router.get('/unread-count', requirePermission(PERMISSIONS.NOTIFICATION_READ), controller.unreadCount);
 router.patch('/read-all', requirePermission(PERMISSIONS.NOTIFICATION_UPDATE), controller.markAllRead);
 router.get('/settings', requirePermission(PERMISSIONS.NOTIFICATION_READ), controller.getSetting);

@@ -20,6 +20,10 @@ export async function authMiddleware(
     }
   }
 
+  if (!token && typeof req.query?.token === 'string') {
+    token = req.query.token;
+  }
+
   if (!token) {
     next(new AppError('Unauthorized', 401, ERROR_CODE.UNAUTHORIZED));
     return;
