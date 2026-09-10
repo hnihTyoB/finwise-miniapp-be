@@ -80,6 +80,7 @@ File này chỉ lưu sự thật và quyết định dài hạn giúp các phiê
 - QUY TẮC BẮT BUỘC: Tất cả tên quyền (Permission names) PHẢI được định nghĩa tập trung trong `src/common/constants/permission.constant.ts` (ở cả BE và FE), TUYỆT ĐỐI KHÔNG hardcode chuỗi string permission rải rác trong code.
 - Mọi route endpoint nghiệp vụ ở backend bắt buộc được bảo vệ bằng middleware `requirePermission(PERMISSIONS.*)`.
 - Các vai trò hệ thống mặc định/bất biến (Bootstrap & System protection) được định nghĩa tập trung qua `SYSTEM_ROLES` trong `src/common/constants/system-role.constant.ts` (ví dụ `SYSTEM_ROLES.USER` cho vai trò đăng ký mặc định, `SYSTEM_ROLES.ADMIN` cho vai trò quản trị bất biến), không dùng `SYSTEM_ROLES` để kiểm tra phân quyền.
+- Endpoint đăng nhập `POST /api/v1/auth/login` hỗ trợ linh hoạt cả email và số điện thoại thông qua trường `email` hoặc `account`, tự động chuẩn hóa định dạng số điện thoại Việt Nam và truy vấn role đi kèm.
 
 ## Trạng thái đã biết
 

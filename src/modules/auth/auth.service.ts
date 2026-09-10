@@ -24,8 +24,19 @@ export class AuthService {
   private readonly uploadService = new UploadService();
 
   async login(data: LoginDto, metadata?: { userAgent?: string; ipAddress?: string }): Promise<LoginResponseDto> {
-    const { email, password } = data;
-    const user = await this.repository.findByEmail(email);
+    const rawIdentifier = (data.account || data.email || '').trim();
+    const { password } = data;
+
+    let user;
+    if (rawIdentifier.includes('@')) {
+      user = await this.repository.findByEmail(rawIdentifier.toLowerCase());
+    } else {
+      const normalizedPhone = rawIdentifier.replace(/^\+84/, '0').replace(/^84/, '0');
+      user = await this.repository.findByPhone(normalizedPhone);
+      if (!user) {
+        user = await this.repository.findByEmail(rawIdentifier.toLowerCase());
+      }
+    }
 
     if (!user) {
       throw new AppError('Invalid credentials', 401, ERROR_CODE.INVALID_CREDENTIALS);

@@ -1,14 +1,20 @@
 import { z } from 'zod';
 import { validateUrl } from '../../common/helpers/url.helper';
 
-export const loginSchema = z.object({
-  email: z
-    .string()
-    .min(1, 'Email is required')
-    .email('Invalid email format')
-    .transform((val) => val.trim().toLowerCase()),
-  password: z.string().min(1, 'Password is required'),
-});
+export const loginSchema = z
+  .object({
+    email: z.string().optional(),
+    account: z.string().optional(),
+    password: z.string().min(1, 'Password is required'),
+  })
+  .refine((data) => Boolean((data.email && data.email.trim().length > 0) || (data.account && data.account.trim().length > 0)), {
+    message: 'Email or account is required',
+    path: ['email'],
+  })
+  .transform((data) => ({
+    email: (data.email || data.account)!.trim(),
+    password: data.password,
+  }));
 
 export const zaloLoginSchema = z
   .object({

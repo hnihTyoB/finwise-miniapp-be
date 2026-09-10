@@ -161,6 +161,7 @@ export class AuthRepository {
   async findByPhone(phoneNumber: string) {
     return prisma.user.findFirst({
       where: { phoneNumber, deletedAt: null },
+      include: { role: true },
     });
   }
 
