@@ -553,6 +553,35 @@ export class AuthService {
         provider: 'zalo',
         providerUserId: zaloId,
       });
+    } else {
+      // User đã tồn tại: Tự động cập nhật SĐT nếu có resolvedPhone mà user chưa có hoặc khác SĐT cũ
+      const updateData: { phoneNumber?: string; fullName?: string; avatarUrl?: string } = {};
+
+      if (resolvedPhone && user.phoneNumber !== resolvedPhone) {
+        // Kiểm tra xem số điện thoại này có đang thuộc về tài khoản khác không để tránh lỗi Unique constraint
+        const existingPhoneUser = await this.repository.findByPhone(resolvedPhone);
+        if (!existingPhoneUser || existingPhoneUser.id === user.id) {
+          updateData.phoneNumber = resolvedPhone;
+        } else {
+          console.warn(`[ZaloAuth] Phone number ${resolvedPhone} is already linked to another user ${existingPhoneUser.id}`);
+        }
+      }
+
+      // Cập nhật thêm tên hoặc avatar nếu tài khoản hiện tại chưa có
+      if (!user.fullName && zaloName) {
+        updateData.fullName = zaloName;
+      }
+      if (!user.avatarUrl && zaloAvatarUrl) {
+        updateData.avatarUrl = zaloAvatarUrl;
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        try {
+          user = await this.repository.updateProfile(user.id, updateData);
+        } catch (updateErr) {
+          console.warn('[ZaloAuth] Failed to update user profile with resolved Zalo info:', updateErr);
+        }
+      }
     }
 
     // Load role relation nếu chưa có (createSocialUser đã include)

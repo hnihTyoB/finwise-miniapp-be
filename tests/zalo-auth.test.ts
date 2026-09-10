@@ -158,5 +158,30 @@ describe('Zalo Auth Integration Tests', () => {
       });
       expect(count).toBe(1);
     });
+
+    it('should update phoneNumber for existing user whose phoneNumber was previously null', async () => {
+      // Giả lập user đã tạo trước đó nhưng phoneNumber là null
+      await prisma.user.updateMany({
+        where: { phoneNumber: testPhone },
+        data: { phoneNumber: null },
+      });
+
+      const res = await request(app)
+        .post('/api/v1/auth/zalo-login')
+        .send({
+          accessToken: 'valid_mock_token_123',
+          phoneToken: 'valid_phone_token_abc',
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.user.phoneNumber).toBe(testPhone);
+
+      const dbUser = await prisma.user.findFirst({
+        where: { phoneNumber: testPhone },
+      });
+      expect(dbUser).not.toBeNull();
+      expect(dbUser?.phoneNumber).toBe(testPhone);
+    });
   });
 });

@@ -168,6 +168,7 @@ export class AuthRepository {
   async updateProfile(userId: string, data: {
     fullName?: string;
     phoneNumber?: string | null;
+    avatarUrl?: string | null;
   }) {
     return prisma.user.update({
       where: { id: userId },
