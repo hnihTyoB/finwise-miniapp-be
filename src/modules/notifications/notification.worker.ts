@@ -3,6 +3,7 @@ import { ReminderService } from '../reminders/reminder.service';
 import { NotificationDeliveryService } from './notification-delivery.service';
 import { NotificationService } from './notification.service';
 import { RecurringTransactionService } from '../recurring-transactions/recurring-transaction.service';
+import { BudgetService } from '../budgets/budget.service';
 
 import { lockService } from '../../common/services/lock.service';
 
@@ -11,6 +12,7 @@ export class NotificationWorker {
   private readonly notificationService = new NotificationService();
   private readonly deliveryService = new NotificationDeliveryService();
   private readonly recurringTransactionService = new RecurringTransactionService();
+  private readonly budgetService = new BudgetService();
   private timer: NodeJS.Timeout | null = null;
   private running = false;
   private lastFinancialScanAt = 0;
@@ -51,6 +53,12 @@ export class NotificationWorker {
     const now = new Date();
 
     try {
+      try {
+        await this.budgetService.processDueRenewals(now);
+      } catch (error) {
+        console.error('Notification worker failed to process budget renewals', error);
+      }
+
       try {
         await this.recurringTransactionService.processDue(
           now,

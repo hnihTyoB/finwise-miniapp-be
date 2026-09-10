@@ -1,6 +1,11 @@
+import { randomUUID } from 'crypto';
 import {
   BudgetPeriod,
+  BudgetRolloverMode,
   BudgetType,
+  NotificationPriority,
+  NotificationSourceType,
+  NotificationType,
   Prisma,
   TransactionType,
 } from '@prisma/client';
@@ -28,11 +33,17 @@ import {
   BudgetRepository,
   BudgetSpendingSummary,
 } from './budget.repository';
+import { NotificationService } from '../notifications/notification.service';
 
 export class BudgetService {
   private readonly repository = new BudgetRepository();
+  private readonly notificationService = new NotificationService();
 
   async findAll(userId: string, query: BudgetQueryDto) {
+    // JIT: check if any due recurring budgets for this user need catch-up
+    const today = instantToBusinessDate(new Date());
+    await this.catchUpDueBudgetsForUser(userId, today);
+
     const result = await this.repository.findAll(userId, query);
     const summaries = await this.repository.getBatchSpendingSummaries(
       userId,
@@ -53,6 +64,29 @@ export class BudgetService {
   async findById(userId: string, id: string) {
     const budget = await this.findRecord(userId, id);
     return this.toResponse(userId, budget);
+  }
+
+  async findSeries(userId: string, id: string) {
+    const budget = await this.findRecord(userId, id);
+    if (!budget.recurrenceGroupId) {
+      return [await this.toResponse(userId, budget)];
+    }
+    const series = await this.repository.findSeries(
+      userId,
+      budget.recurrenceGroupId,
+    );
+    const summaries = await this.repository.getBatchSpendingSummaries(
+      userId,
+      series,
+    );
+    return series.map((b) => {
+      const spending = summaries.get(b.id) ?? {
+        amount: new Prisma.Decimal(0),
+        transactionCount: 0,
+        lastTransactionAt: null,
+      };
+      return this.formatBudgetResponse(b, spending);
+    });
   }
 
   async create(userId: string, data: CreateBudgetDto) {
@@ -77,6 +111,20 @@ export class BudgetService {
     const budget = await this.repository.update(id, persistence);
     await this.invalidateReportCache(userId);
     return this.toResponse(userId, budget);
+  }
+
+  async toggleAutoRenew(userId: string, id: string, autoRenew: boolean) {
+    const budget = await this.findRecord(userId, id);
+    if (!budget.isRecurring) {
+      throw new AppError(
+        'Cannot toggle auto-renew on a non-recurring budget',
+        400,
+        ERROR_CODE.VALIDATION_ERROR,
+      );
+    }
+    const updated = await this.repository.updateAutoRenew(userId, id, autoRenew);
+    await this.invalidateReportCache(userId);
+    return this.toResponse(userId, updated);
   }
 
   async archive(userId: string, id: string) {
@@ -105,6 +153,228 @@ export class BudgetService {
     return this.toResponse(userId, budget);
   }
 
+  async processDueRenewals(now = new Date()): Promise<number> {
+    const today = instantToBusinessDate(now);
+    const dueBudgets = await this.repository.findDueForRenewal(today, 50);
+    let renewedCount = 0;
+
+    for (const parent of dueBudgets) {
+      try {
+        let currentParent: BudgetRecord | null = parent;
+        let iteration = 0;
+        while (currentParent && iteration < 3) {
+          iteration++;
+          const currentParentEndDate = prismaDateToBusinessDate(
+            currentParent.endDate,
+          );
+          if (currentParentEndDate >= today) break;
+
+          const nextStartDate = addBusinessDays(currentParentEndDate, 1);
+          if (
+            currentParent.autoRenewUntil &&
+            nextStartDate >
+              prismaDateToBusinessDate(currentParent.autoRenewUntil)
+          ) {
+            break;
+          }
+
+          const child = await this.renewSingleBudget(currentParent, today);
+          if (child) {
+            renewedCount++;
+            currentParent = child;
+          } else {
+            break;
+          }
+        }
+      } catch (error) {
+        console.error(`Failed to renew budget ${parent.id}:`, error);
+      }
+    }
+
+    return renewedCount;
+  }
+
+  private async catchUpDueBudgetsForUser(
+    userId: string,
+    today: BusinessDate,
+  ): Promise<void> {
+    try {
+      const dueBudgets = await this.repository.findDueForRenewalByUser(
+        userId,
+        today,
+      );
+      for (const parent of dueBudgets) {
+        let currentParent: BudgetRecord | null = parent;
+        let iteration = 0;
+        while (currentParent && iteration < 3) {
+          iteration++;
+          const currentParentEndDate = prismaDateToBusinessDate(
+            currentParent.endDate,
+          );
+          if (currentParentEndDate >= today) break;
+
+          const nextStartDate = addBusinessDays(currentParentEndDate, 1);
+          if (
+            currentParent.autoRenewUntil &&
+            nextStartDate >
+              prismaDateToBusinessDate(currentParent.autoRenewUntil)
+          ) {
+            break;
+          }
+
+          const child = await this.renewSingleBudget(currentParent, today);
+          if (child) {
+            currentParent = child;
+          } else {
+            break;
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`Failed to catch-up budgets for user ${userId}:`, error);
+    }
+  }
+
+  private async renewSingleBudget(
+    parentBudget: BudgetRecord,
+    today: BusinessDate,
+  ): Promise<BudgetRecord | null> {
+    // 1. Verify category is still active if category budget
+    if (parentBudget.categoryId) {
+      const category = await this.repository.findCategory(
+        parentBudget.userId,
+        parentBudget.categoryId,
+      );
+      if (!category || category.isArchived) {
+        await this.repository.updateAutoRenew(
+          parentBudget.userId,
+          parentBudget.id,
+          false,
+        );
+        await this.notificationService.create({
+          userId: parentBudget.userId,
+          type: NotificationType.SYSTEM,
+          priority: NotificationPriority.HIGH,
+          title: 'Tự động gia hạn ngân sách bị tạm dừng',
+          message: `Ngân sách "${parentBudget.name}" không thể tự động gia hạn vì danh mục chi tiêu đã bị lưu trữ hoặc xóa.`,
+          sourceType: NotificationSourceType.SYSTEM,
+          sourceId: parentBudget.id,
+          actionUrl: `/budgets/${parentBudget.id}`,
+          data: { budgetId: parentBudget.id, reason: 'CATEGORY_ARCHIVED' },
+          dedupKey: `budget-renew-failed:${parentBudget.id}:${today}`,
+        });
+        return null;
+      }
+    }
+
+    // 2. Compute date boundaries
+    const parentEndDate = prismaDateToBusinessDate(parentBudget.endDate);
+    const newStartDate = addBusinessDays(parentEndDate, 1);
+    const newEndDate = this.resolveEndDate(parentBudget.period, newStartDate);
+
+    // 3. Compute new amount based on rollover policy
+    const spending = await this.repository.getSpendingSummary(
+      parentBudget.userId,
+      parentBudget.categoryId,
+      parentBudget.startDate,
+      parentBudget.endDate,
+      parentBudget.currency,
+    );
+    const remaining = parentBudget.amount.minus(spending.amount);
+    const baseAmount = parentBudget.amount;
+    let newAmount = baseAmount;
+    let rolloverAmount = new Prisma.Decimal(0);
+
+    switch (parentBudget.rolloverMode) {
+      case BudgetRolloverMode.ROLLOVER_SURPLUS:
+        if (remaining.greaterThan(0)) {
+          newAmount = baseAmount.plus(remaining);
+          rolloverAmount = remaining;
+        }
+        break;
+      case BudgetRolloverMode.ROLLOVER_DEFICIT:
+        if (remaining.lessThan(0)) {
+          newAmount = Prisma.Decimal.max(
+            new Prisma.Decimal(0),
+            baseAmount.plus(remaining),
+          );
+          rolloverAmount = remaining;
+        }
+        break;
+      case BudgetRolloverMode.ROLLOVER_NET:
+        newAmount = Prisma.Decimal.max(
+          new Prisma.Decimal(0),
+          baseAmount.plus(remaining),
+        );
+        rolloverAmount = remaining;
+        break;
+      case BudgetRolloverMode.RESET:
+      default:
+        newAmount = baseAmount;
+        rolloverAmount = new Prisma.Decimal(0);
+        break;
+    }
+
+    // 4. Update name dynamically if pattern "tháng X" or "month X" exists
+    let newName = parentBudget.name;
+    const newMonth = parseInt(newStartDate.slice(5, 7), 10);
+    if (/(tháng\s*)\d+/i.test(newName)) {
+      newName = newName.replace(/(tháng\s*)\d+/i, `$1${newMonth}`);
+    } else if (/(month\s*)\d+/i.test(newName)) {
+      newName = newName.replace(/(month\s*)\d+/i, `$1${newMonth}`);
+    }
+
+    // 5. Build persist data
+    const persistData: PersistBudgetDto = {
+      name: newName,
+      amount: newAmount.toFixed(2),
+      currency: parentBudget.currency,
+      type: parentBudget.type,
+      period: parentBudget.period,
+      categoryId: parentBudget.categoryId,
+      startDate: newStartDate,
+      endDate: newEndDate,
+      alertThreshold: parentBudget.alertThreshold.toFixed(2),
+      isRecurring: true,
+      autoRenew: true,
+      recurrenceGroupId: parentBudget.recurrenceGroupId,
+      rolloverMode: parentBudget.rolloverMode,
+      rolloverAmount: rolloverAmount.toFixed(2),
+      autoRenewUntil: parentBudget.autoRenewUntil
+        ? prismaDateToBusinessDate(parentBudget.autoRenewUntil)
+        : null,
+      parentBudgetId: parentBudget.id,
+    };
+
+    const newBudget = await this.repository.renewBudgetTransaction(
+      parentBudget,
+      persistData,
+    );
+
+    // 6. Send in-app notification
+    await this.notificationService.create({
+      userId: newBudget.userId,
+      type: NotificationType.SYSTEM,
+      priority: NotificationPriority.NORMAL,
+      title: 'Ngân sách chu kỳ mới đã sẵn sàng',
+      message: `Ngân sách "${newBudget.name}" đã được tự động kích hoạt cho chu kỳ tiếp theo (${newStartDate} đến ${newEndDate}).`,
+      sourceType: NotificationSourceType.SYSTEM,
+      sourceId: newBudget.id,
+      actionUrl: `/budgets/${newBudget.id}`,
+      data: {
+        budgetId: newBudget.id,
+        recurrenceGroupId: newBudget.recurrenceGroupId,
+        startDate: newStartDate,
+        endDate: newEndDate,
+        rolloverAmount: rolloverAmount.toFixed(2),
+      },
+      dedupKey: `budget-renew:${newBudget.recurrenceGroupId}:${newStartDate}`,
+    });
+
+    await this.invalidateReportCache(parentBudget.userId);
+    return newBudget;
+  }
+
   private async findRecord(userId: string, id: string) {
     const budget = await this.repository.findById(userId, id);
 
@@ -129,6 +399,10 @@ export class BudgetService {
       data.startDate,
       data.endDate,
     );
+    const isRecurring = data.isRecurring ?? false;
+    const recurrenceGroupId = isRecurring ? randomUUID() : null;
+    const autoRenew = isRecurring ? (data.autoRenew ?? true) : false;
+    const rolloverMode = data.rolloverMode ?? BudgetRolloverMode.RESET;
 
     return {
       name: data.name,
@@ -140,6 +414,11 @@ export class BudgetService {
       endDate,
       alertThreshold: data.alertThreshold,
       currency: data.currency,
+      isRecurring,
+      autoRenew,
+      recurrenceGroupId,
+      rolloverMode,
+      autoRenewUntil: data.autoRenewUntil ?? null,
     };
   }
 
@@ -150,12 +429,14 @@ export class BudgetService {
   ): Promise<PersistBudgetDto> {
     const type = data.type ?? current.type;
     const period = data.period ?? current.period;
-    const startDate = data.startDate ?? prismaDateToBusinessDate(current.startDate);
-    const requestedCategoryId = data.categoryId !== undefined
-      ? data.categoryId
-      : data.type === BudgetType.OVERALL
-        ? null
-        : current.categoryId;
+    const startDate =
+      data.startDate ?? prismaDateToBusinessDate(current.startDate);
+    const requestedCategoryId =
+      data.categoryId !== undefined
+        ? data.categoryId
+        : data.type === BudgetType.OVERALL
+          ? null
+          : current.categoryId;
     const categoryId = await this.resolveCategoryId(
       userId,
       type,
@@ -164,9 +445,9 @@ export class BudgetService {
     let customEndDate = data.endDate;
 
     if (
-      period === BudgetPeriod.CUSTOM
-      && customEndDate === undefined
-      && current.period === BudgetPeriod.CUSTOM
+      period === BudgetPeriod.CUSTOM &&
+      customEndDate === undefined &&
+      current.period === BudgetPeriod.CUSTOM
     ) {
       customEndDate = prismaDateToBusinessDate(current.endDate);
     }
@@ -181,6 +462,25 @@ export class BudgetService {
 
     const endDate = this.resolveEndDate(period, startDate, customEndDate);
 
+    const isRecurring =
+      data.isRecurring !== undefined ? data.isRecurring : current.isRecurring;
+    let recurrenceGroupId = current.recurrenceGroupId;
+    if (isRecurring && !recurrenceGroupId) {
+      recurrenceGroupId = randomUUID();
+    } else if (!isRecurring) {
+      recurrenceGroupId = null;
+    }
+    const autoRenew = isRecurring
+      ? (data.autoRenew !== undefined ? data.autoRenew : current.autoRenew)
+      : false;
+    const rolloverMode = data.rolloverMode ?? current.rolloverMode;
+    const autoRenewUntil =
+      data.autoRenewUntil !== undefined
+        ? data.autoRenewUntil
+        : current.autoRenewUntil
+          ? prismaDateToBusinessDate(current.autoRenewUntil)
+          : null;
+
     return {
       name: data.name ?? current.name,
       amount: data.amount ?? current.amount.toFixed(2),
@@ -191,6 +491,11 @@ export class BudgetService {
       endDate,
       alertThreshold: data.alertThreshold ?? current.alertThreshold.toFixed(2),
       currency: data.currency ?? current.currency,
+      isRecurring,
+      autoRenew,
+      recurrenceGroupId,
+      rolloverMode,
+      autoRenewUntil,
     };
   }
 
@@ -309,7 +614,11 @@ export class BudgetService {
       ...budget,
       startDate: prismaDateToBusinessDate(budget.startDate),
       endDate: prismaDateToBusinessDate(budget.endDate),
+      autoRenewUntil: budget.autoRenewUntil
+        ? prismaDateToBusinessDate(budget.autoRenewUntil)
+        : null,
       amount: budget.amount.toFixed(2),
+      rolloverAmount: budget.rolloverAmount.toFixed(2),
       alertThreshold: budget.alertThreshold.toFixed(2),
       usage: this.calculateUsage(budget, spending),
     };

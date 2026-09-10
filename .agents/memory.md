@@ -41,6 +41,11 @@ File này chỉ lưu sự thật và quyết định dài hạn giúp các phiê
   danh mục chi (`CATEGORY`), chu kỳ `CUSTOM`, `WEEKLY`, `MONTHLY`, `YEARLY` và archive
   để giữ lịch sử. Mức sử dụng, phần trăm cùng cảnh báo ngưỡng được tổng hợp trực tiếp
   từ Transaction `EXPENSE` cùng currency trong `[startDate, endDate)` khi đọc API.
+  Hỗ trợ tính năng tự động gia hạn chu kỳ (`isRecurring`, `autoRenew`, `recurrenceGroupId`,
+  `rolloverMode`, `rolloverAmount`, `autoRenewUntil`). Kích hoạt song song qua Background
+  Worker chạy định kỳ và cơ chế JIT Fallback trong `BudgetService.findAll` khi người dùng
+  truy cập danh sách ngân sách. Khóa duy nhất `(recurrenceGroupId, startDate)` đảm bảo
+  tính idempotency, tránh tạo trùng lặp chu kỳ.
 - Saving Goal có trạng thái `ACTIVE`, `PAUSED`, `COMPLETED`, dùng archive để giữ lịch sử
   và tổng hợp tiến độ từ Saving Contribution. Trạng thái hoàn thành được đồng bộ tự
   động trong transaction Serializable khi contribution hoặc số tiền mục tiêu thay đổi;
@@ -117,6 +122,9 @@ File này chỉ lưu sự thật và quyết định dài hạn giúp các phiê
   delivery outbox và user reminders cùng các enum/index phục vụ worker nền.
   `20260820120000_add_recurring_transactions` thêm lịch giao dịch định kỳ, occurrence idempotency,
   quan hệ với transaction được tạo và các index phục vụ worker.
+  `20260910183000_add_budget_recurrence` thêm cấu hình tự động gia hạn ngân sách (`isRecurring`,
+  `autoRenew`, `recurrenceGroupId`, `rolloverMode`, `rolloverAmount`, `autoRenewUntil`), quan hệ phả hệ
+  chu kỳ (`parentBudgetId`), enum `BudgetRolloverMode` và ràng buộc duy nhất `(recurrenceGroupId, startDate)`.
   Migration history cũ vẫn chưa phản ánh đầy đủ các thay đổi schema của auth đã
   được commit trước đó.
 

@@ -73,6 +73,30 @@ export class BudgetController {
     }
   };
 
+  toggleAutoRenew = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const budget = await this.service.toggleAutoRenew(
+        req.user.id,
+        req.params.id,
+        req.body.autoRenew,
+      );
+
+      res.json({ success: true, data: budget });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  findSeries = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const series = await this.service.findSeries(req.user.id, req.params.id);
+
+      res.json({ success: true, data: series });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   restore = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const budget = await this.service.restore(req.user.id, req.params.id);

@@ -1,5 +1,12 @@
-import { BudgetPeriod, BudgetType, TransactionType } from '@prisma/client';
+import {
+  BudgetPeriod,
+  BudgetRolloverMode,
+  BudgetType,
+  TransactionType,
+} from '@prisma/client';
 import { BusinessDate } from '../../common/date-time/business-time';
+
+export { BudgetRolloverMode };
 
 export type BudgetSortField =
   | 'name'
@@ -20,6 +27,7 @@ export interface BudgetQueryDto {
   categoryId?: string;
   activeAt?: BusinessDate;
   includeArchived: boolean;
+  isRecurring?: boolean;
   sortBy: BudgetSortField;
   order: SortOrder;
   page: number;
@@ -36,6 +44,10 @@ export interface CreateBudgetDto {
   startDate: BusinessDate;
   endDate?: BusinessDate;
   alertThreshold: string;
+  isRecurring?: boolean;
+  autoRenew?: boolean;
+  rolloverMode?: BudgetRolloverMode;
+  autoRenewUntil?: BusinessDate | null;
 }
 
 export interface UpdateBudgetDto {
@@ -48,6 +60,14 @@ export interface UpdateBudgetDto {
   startDate?: BusinessDate;
   endDate?: BusinessDate;
   alertThreshold?: string;
+  isRecurring?: boolean;
+  autoRenew?: boolean;
+  rolloverMode?: BudgetRolloverMode;
+  autoRenewUntil?: BusinessDate | null;
+}
+
+export interface ToggleAutoRenewDto {
+  autoRenew: boolean;
 }
 
 export interface PersistBudgetDto {
@@ -60,6 +80,14 @@ export interface PersistBudgetDto {
   startDate: BusinessDate;
   endDate: BusinessDate;
   alertThreshold: string;
+  isRecurring?: boolean;
+  autoRenew?: boolean;
+  recurrenceGroupId?: string | null;
+  rolloverMode?: BudgetRolloverMode;
+  rolloverAmount?: string;
+  autoRenewUntil?: BusinessDate | null;
+  renewedAt?: Date | null;
+  parentBudgetId?: string | null;
 }
 
 export interface BudgetCategoryDto {
@@ -82,6 +110,7 @@ export interface BudgetUsageDto {
 
 export interface BudgetResponseDto {
   id: string;
+  userId: string;
   name: string;
   amount: string;
   currency: string;
@@ -92,6 +121,14 @@ export interface BudgetResponseDto {
   endDate: BusinessDate;
   alertThreshold: string;
   isArchived: boolean;
+  isRecurring: boolean;
+  autoRenew: boolean;
+  recurrenceGroupId: string | null;
+  rolloverMode: BudgetRolloverMode;
+  rolloverAmount: string;
+  autoRenewUntil: BusinessDate | null;
+  renewedAt: Date | null;
+  parentBudgetId: string | null;
   createdAt: Date;
   updatedAt: Date;
   category: BudgetCategoryDto | null;

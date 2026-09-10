@@ -41,8 +41,19 @@ const dateSchema = z
     }
   });
 
+const rolloverModeSchema = z.enum([
+  'RESET',
+  'ROLLOVER_SURPLUS',
+  'ROLLOVER_DEFICIT',
+  'ROLLOVER_NET',
+]);
+
 export const budgetParamsSchema = z.object({
   id: z.string().uuid('Invalid budget id'),
+});
+
+export const toggleAutoRenewSchema = z.object({
+  autoRenew: z.boolean({ required_error: 'autoRenew is required' }),
 });
 
 export const findBudgetsSchema = z.object({
@@ -57,6 +68,10 @@ export const findBudgetsSchema = z.object({
     .transform((value) => value === 'true')
     .optional()
     .default('false'),
+  isRecurring: z
+    .enum(['true', 'false'])
+    .transform((value) => value === 'true')
+    .optional(),
   sortBy: z
     .enum(['name', 'amount', 'startDate', 'endDate', 'createdAt', 'updatedAt'])
     .optional()
@@ -77,6 +92,10 @@ export const createBudgetSchema = z
     startDate: dateSchema,
     endDate: dateSchema.optional(),
     alertThreshold: alertThresholdSchema.optional().default('80'),
+    isRecurring: z.boolean().optional().default(false),
+    autoRenew: z.boolean().optional(),
+    rolloverMode: rolloverModeSchema.optional().default('RESET'),
+    autoRenewUntil: dateSchema.nullable().optional(),
   })
   .superRefine((data, context) => {
     if (data.type === 'CATEGORY' && !data.categoryId) {
@@ -118,6 +137,22 @@ export const createBudgetSchema = z
         message: 'endDate must be on or after startDate',
       });
     }
+
+    if (data.isRecurring && data.period === 'CUSTOM') {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['isRecurring'],
+        message: 'Recurring is only supported for recurring periods (WEEKLY, MONTHLY, YEARLY)',
+      });
+    }
+
+    if (data.autoRenewUntil && data.autoRenewUntil < data.startDate) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['autoRenewUntil'],
+        message: 'autoRenewUntil must be on or after startDate',
+      });
+    }
   });
 
 export const updateBudgetSchema = z
@@ -131,6 +166,10 @@ export const updateBudgetSchema = z
     startDate: dateSchema.optional(),
     endDate: dateSchema.optional(),
     alertThreshold: alertThresholdSchema.optional(),
+    isRecurring: z.boolean().optional(),
+    autoRenew: z.boolean().optional(),
+    rolloverMode: rolloverModeSchema.optional(),
+    autoRenewUntil: dateSchema.nullable().optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: 'At least one field is required',
@@ -149,6 +188,14 @@ export const updateBudgetSchema = z
         code: z.ZodIssueCode.custom,
         path: ['endDate'],
         message: 'endDate must be on or after startDate',
+      });
+    }
+
+    if (data.isRecurring && data.period === 'CUSTOM') {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['isRecurring'],
+        message: 'Recurring is only supported for recurring periods (WEEKLY, MONTHLY, YEARLY)',
       });
     }
   });

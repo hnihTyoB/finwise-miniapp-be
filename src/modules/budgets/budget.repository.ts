@@ -15,6 +15,7 @@ import {
 
 const budgetSelect = {
   id: true,
+  userId: true,
   name: true,
   amount: true,
   currency: true,
@@ -25,6 +26,14 @@ const budgetSelect = {
   endDate: true,
   alertThreshold: true,
   isArchived: true,
+  isRecurring: true,
+  autoRenew: true,
+  recurrenceGroupId: true,
+  rolloverMode: true,
+  rolloverAmount: true,
+  autoRenewUntil: true,
+  renewedAt: true,
+  parentBudgetId: true,
   createdAt: true,
   updatedAt: true,
   category: {
@@ -58,6 +67,7 @@ export class BudgetRepository {
       categoryId,
       activeAt,
       includeArchived,
+      isRecurring,
       sortBy,
       order,
       page,
@@ -69,6 +79,7 @@ export class BudgetRepository {
       ...(period ? { period } : {}),
       ...(currency ? { currency } : {}),
       ...(categoryId ? { categoryId } : {}),
+      ...(isRecurring !== undefined ? { isRecurring } : {}),
       ...(activeAt
         ? {
           startDate: { lte: businessDateToPrismaDate(activeAt) },
@@ -228,9 +239,27 @@ export class BudgetRepository {
     return prisma.budget.create({
       data: {
         userId,
-        ...data,
+        name: data.name,
+        amount: data.amount,
+        currency: data.currency,
+        type: data.type,
+        period: data.period,
+        categoryId: data.categoryId,
+        alertThreshold: data.alertThreshold,
         startDate: businessDateToPrismaDate(data.startDate),
         endDate: businessDateToPrismaDate(data.endDate),
+        isRecurring: data.isRecurring ?? false,
+        autoRenew: data.autoRenew ?? (data.isRecurring ?? false),
+        recurrenceGroupId: data.recurrenceGroupId,
+        rolloverMode: data.rolloverMode,
+        rolloverAmount: data.rolloverAmount
+          ? new Prisma.Decimal(data.rolloverAmount)
+          : undefined,
+        autoRenewUntil: data.autoRenewUntil
+          ? businessDateToPrismaDate(data.autoRenewUntil)
+          : null,
+        renewedAt: data.renewedAt,
+        parentBudgetId: data.parentBudgetId,
       },
       select: budgetSelect,
     });
@@ -240,11 +269,122 @@ export class BudgetRepository {
     return prisma.budget.update({
       where: { id },
       data: {
-        ...data,
+        name: data.name,
+        amount: data.amount,
+        currency: data.currency,
+        type: data.type,
+        period: data.period,
+        categoryId: data.categoryId,
+        alertThreshold: data.alertThreshold,
         startDate: businessDateToPrismaDate(data.startDate),
         endDate: businessDateToPrismaDate(data.endDate),
+        isRecurring: data.isRecurring,
+        autoRenew: data.autoRenew,
+        recurrenceGroupId: data.recurrenceGroupId,
+        rolloverMode: data.rolloverMode,
+        rolloverAmount: data.rolloverAmount
+          ? new Prisma.Decimal(data.rolloverAmount)
+          : undefined,
+        autoRenewUntil: data.autoRenewUntil
+          ? businessDateToPrismaDate(data.autoRenewUntil)
+          : null,
       },
       select: budgetSelect,
+    });
+  }
+
+  updateAutoRenew(userId: string, id: string, autoRenew: boolean) {
+    return prisma.budget.update({
+      where: { id, userId },
+      data: { autoRenew },
+      select: budgetSelect,
+    });
+  }
+
+  findDueForRenewal(today: BusinessDate, limit = 50) {
+    const todayDate = businessDateToPrismaDate(today);
+    return prisma.budget.findMany({
+      where: {
+        isRecurring: true,
+        autoRenew: true,
+        isArchived: false,
+        endDate: { lt: todayDate },
+        renewedAt: null,
+        OR: [
+          { autoRenewUntil: null },
+          { autoRenewUntil: { gte: todayDate } },
+        ],
+      },
+      select: budgetSelect,
+      take: limit,
+      orderBy: { endDate: 'asc' },
+    });
+  }
+
+  findDueForRenewalByUser(userId: string, today: BusinessDate) {
+    const todayDate = businessDateToPrismaDate(today);
+    return prisma.budget.findMany({
+      where: {
+        userId,
+        isRecurring: true,
+        autoRenew: true,
+        isArchived: false,
+        endDate: { lt: todayDate },
+        renewedAt: null,
+        OR: [
+          { autoRenewUntil: null },
+          { autoRenewUntil: { gte: todayDate } },
+        ],
+      },
+      select: budgetSelect,
+      orderBy: { endDate: 'asc' },
+    });
+  }
+
+  findSeries(userId: string, recurrenceGroupId: string) {
+    return prisma.budget.findMany({
+      where: { userId, recurrenceGroupId },
+      select: budgetSelect,
+      orderBy: { startDate: 'asc' },
+    });
+  }
+
+  renewBudgetTransaction(
+    parentBudget: BudgetRecord,
+    newBudgetData: PersistBudgetDto,
+  ) {
+    return prisma.$transaction(async (tx) => {
+      // 1. Mark parent budget as renewed
+      await tx.budget.update({
+        where: { id: parentBudget.id },
+        data: { renewedAt: new Date() },
+      });
+
+      // 2. Insert new budget for next cycle
+      return tx.budget.create({
+        data: {
+          userId: parentBudget.userId,
+          name: newBudgetData.name,
+          amount: newBudgetData.amount,
+          currency: newBudgetData.currency,
+          type: newBudgetData.type,
+          period: newBudgetData.period,
+          categoryId: newBudgetData.categoryId,
+          alertThreshold: newBudgetData.alertThreshold,
+          startDate: businessDateToPrismaDate(newBudgetData.startDate),
+          endDate: businessDateToPrismaDate(newBudgetData.endDate),
+          isRecurring: true,
+          autoRenew: true,
+          recurrenceGroupId: parentBudget.recurrenceGroupId,
+          rolloverMode: parentBudget.rolloverMode,
+          rolloverAmount: newBudgetData.rolloverAmount
+            ? new Prisma.Decimal(newBudgetData.rolloverAmount)
+            : new Prisma.Decimal(0),
+          autoRenewUntil: parentBudget.autoRenewUntil,
+          parentBudgetId: parentBudget.id,
+        },
+        select: budgetSelect,
+      });
     });
   }
 

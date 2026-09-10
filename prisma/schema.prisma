@@ -315,24 +315,41 @@ model Transfer {
   @@map("transfers")
 }
 
-model Budget {
-  id             String       @id @default(uuid()) @db.Uuid
-  userId         String       @map("user_id") @db.Uuid
-  categoryId     String?      @map("category_id") @db.Uuid
-  name           String
-  amount         Decimal      @db.Decimal(18, 2)
-  currency       String       @default("VND") @db.VarChar(3)
-  type           BudgetType   @default(CATEGORY)
-  period         BudgetPeriod @default(CUSTOM)
-  startDate      DateTime     @map("start_date") @db.Date
-  endDate        DateTime     @map("end_date") @db.Date
-  alertThreshold Decimal      @default(80) @map("alert_threshold") @db.Decimal(5, 2)
-  isArchived     Boolean      @default(false) @map("is_archived")
-  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+enum BudgetRolloverMode {
+  RESET
+  ROLLOVER_SURPLUS
+  ROLLOVER_DEFICIT
+  ROLLOVER_NET
+}
 
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category Category? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+model Budget {
+  id                String             @id @default(uuid()) @db.Uuid
+  userId            String             @map("user_id") @db.Uuid
+  categoryId        String?            @map("category_id") @db.Uuid
+  name              String
+  amount            Decimal            @db.Decimal(18, 2)
+  currency          String             @default("VND") @db.VarChar(3)
+  type              BudgetType         @default(CATEGORY)
+  period            BudgetPeriod       @default(CUSTOM)
+  startDate         DateTime           @map("start_date") @db.Date
+  endDate           DateTime           @map("end_date") @db.Date
+  alertThreshold    Decimal            @default(80) @map("alert_threshold") @db.Decimal(5, 2)
+  isArchived        Boolean            @default(false) @map("is_archived")
+  isRecurring       Boolean            @default(false) @map("is_recurring")
+  autoRenew         Boolean            @default(false) @map("auto_renew")
+  recurrenceGroupId String?            @map("recurrence_group_id") @db.Uuid
+  rolloverMode      BudgetRolloverMode @default(RESET) @map("rollover_mode")
+  rolloverAmount    Decimal            @default(0) @map("rollover_amount") @db.Decimal(18, 2)
+  autoRenewUntil    DateTime?          @map("auto_renew_until") @db.Date
+  renewedAt         DateTime?          @map("renewed_at") @db.Timestamptz(3)
+  parentBudgetId    String?            @map("parent_budget_id") @db.Uuid
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category     Category? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  parentBudget Budget?   @relation("BudgetHistory", fields: [parentBudgetId], references: [id], onDelete: SetNull)
+  childBudgets Budget[]  @relation("BudgetHistory")
 
   @@index([categoryId])
   @@index([userId, isArchived])
@@ -340,6 +357,9 @@ model Budget {
   @@index([userId, currency, startDate, endDate])
   @@index([userId, type, period])
   @@index([isArchived, startDate, endDate])
+  @@index([userId, isRecurring, autoRenew])
+  @@index([recurrenceGroupId, startDate])
+  @@unique([recurrenceGroupId, startDate])
   @@map("budgets")
 }
 

@@ -8,6 +8,7 @@ import {
   budgetParamsSchema,
   createBudgetSchema,
   findBudgetsSchema,
+  toggleAutoRenewSchema,
   updateBudgetSchema,
 } from './budget.validation';
 
@@ -19,12 +20,20 @@ router.use(authMiddleware);
 router.get('/', requirePermission(PERMISSIONS.BUDGET_READ), validate(findBudgetsSchema, 'query'), controller.findAll);
 router.post('/', requirePermission(PERMISSIONS.BUDGET_CREATE), validate(createBudgetSchema), controller.create);
 router.get('/:id', requirePermission(PERMISSIONS.BUDGET_READ), validate(budgetParamsSchema, 'params'), controller.findById);
+router.get('/:id/series', requirePermission(PERMISSIONS.BUDGET_READ), validate(budgetParamsSchema, 'params'), controller.findSeries);
 router.put(
   '/:id',
   requirePermission(PERMISSIONS.BUDGET_UPDATE),
   validate(budgetParamsSchema, 'params'),
   validate(updateBudgetSchema),
   controller.update,
+);
+router.patch(
+  '/:id/auto-renew',
+  requirePermission(PERMISSIONS.BUDGET_UPDATE),
+  validate(budgetParamsSchema, 'params'),
+  validate(toggleAutoRenewSchema),
+  controller.toggleAutoRenew,
 );
 router.patch(
   '/:id/restore',

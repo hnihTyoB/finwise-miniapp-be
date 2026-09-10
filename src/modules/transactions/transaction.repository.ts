@@ -72,6 +72,8 @@ export class TransactionRepository {
       try {
         return await prisma.$transaction(operation, {
           isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          maxWait: 10000,
+          timeout: 15000,
         });
       } catch (error) {
         const shouldRetry = error instanceof Prisma.PrismaClientKnownRequestError
