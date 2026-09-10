@@ -465,6 +465,14 @@ export class AuthService {
     let zaloName = dto.name || 'Người dùng Zalo';
     let zaloAvatarUrl: string | null = dto.avatar || null;
 
+    console.log('[ZaloAuth] Incoming login request:', {
+      clientZaloId: dto.zaloId,
+      clientName: dto.name,
+      clientAvatar: dto.avatar,
+      hasPhoneToken: Boolean(dto.phoneToken),
+      hasPhoneNumber: Boolean(dto.phoneNumber),
+    });
+
     try {
       const appsecretProof = crypto
         .createHmac('sha256', appSecret)
@@ -472,6 +480,7 @@ export class AuthService {
         .digest('hex');
 
       const zaloProfile = await this.fetchZaloProfile(accessToken, appsecretProof);
+      console.log('[ZaloAuth] fetchZaloProfile response:', zaloProfile);
       if (zaloProfile && zaloProfile.id) {
         zaloId = zaloProfile.id;
         if (zaloProfile.name) zaloName = zaloProfile.name;
@@ -497,6 +506,7 @@ export class AuthService {
     if (dto.phoneToken) {
       try {
         const phoneResponse = await this.fetchZaloPhoneNumber(accessToken, dto.phoneToken, appSecret);
+        console.log('[ZaloAuth] fetchZaloPhoneNumber response:', phoneResponse);
         if (phoneResponse && phoneResponse.data?.number) {
           resolvedPhone = phoneResponse.data.number;
         } else if (phoneResponse?.error === -501) {
@@ -553,6 +563,7 @@ export class AuthService {
         provider: 'zalo',
         providerUserId: zaloId,
       });
+      console.log('[ZaloAuth] Created new user:', user.id);
     } else {
       // User đã tồn tại: Tự động cập nhật SĐT nếu có resolvedPhone mà user chưa có hoặc khác SĐT cũ
       const updateData: { phoneNumber?: string; fullName?: string; avatarUrl?: string } = {};
@@ -576,11 +587,15 @@ export class AuthService {
       }
 
       if (Object.keys(updateData).length > 0) {
+        console.log(`[ZaloAuth] Updating existing user ${user.id} with:`, updateData);
         try {
           user = await this.repository.updateProfile(user.id, updateData);
+          console.log(`[ZaloAuth] Successfully updated user ${user.id}`);
         } catch (updateErr) {
           console.warn('[ZaloAuth] Failed to update user profile with resolved Zalo info:', updateErr);
         }
+      } else {
+        console.log(`[ZaloAuth] No new data to update for user ${user.id}`);
       }
     }
 
