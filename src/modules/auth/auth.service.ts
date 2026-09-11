@@ -459,6 +459,9 @@ export class AuthService {
   ): Promise<LoginResponseDto> {
     const { accessToken } = dto;
     const appSecret = process.env.ZALO_APP_SECRET || '';
+    const appsecretProof = appSecret
+      ? crypto.createHmac('sha256', appSecret).update(accessToken).digest('hex')
+      : '';
 
     // 1. Xác thực access_token và lấy thông tin Zalo profile (có fallback khi IP server ở nước ngoài)
     let zaloId = dto.zaloId || '';
@@ -474,11 +477,6 @@ export class AuthService {
     });
 
     try {
-      const appsecretProof = crypto
-        .createHmac('sha256', appSecret)
-        .update(accessToken)
-        .digest('hex');
-
       const zaloProfile = await this.fetchZaloProfile(accessToken, appsecretProof);
       console.log('[ZaloAuth] fetchZaloProfile response:', zaloProfile);
       if (zaloProfile && zaloProfile.id) {
@@ -505,7 +503,7 @@ export class AuthService {
 
     if (dto.phoneToken) {
       try {
-        const phoneResponse = await this.fetchZaloPhoneNumber(accessToken, dto.phoneToken, appSecret);
+        const phoneResponse = await this.fetchZaloPhoneNumber(accessToken, dto.phoneToken, appSecret, appsecretProof);
         console.log('[ZaloAuth] fetchZaloPhoneNumber response:', phoneResponse);
         if (phoneResponse && phoneResponse.data?.number) {
           resolvedPhone = phoneResponse.data.number;
@@ -694,17 +692,28 @@ export class AuthService {
     accessToken: string,
     phoneToken: string,
     appSecret: string,
+    appsecretProof?: string,
   ): Promise<ZaloPhoneResponse> {
     return new Promise((resolve, reject) => {
+      const proof =
+        appsecretProof ||
+        (appSecret ? crypto.createHmac('sha256', appSecret).update(accessToken).digest('hex') : '');
+
+      const headers: Record<string, string> = {
+        access_token: accessToken,
+        code: phoneToken,
+        secret_key: appSecret,
+      };
+
+      if (proof) {
+        headers.appsecret_proof = proof;
+      }
+
       const options = {
         hostname: 'graph.zalo.me',
         path: '/v2.0/me/info',
         method: 'GET',
-        headers: {
-          access_token: accessToken,
-          code: phoneToken,
-          secret_key: appSecret,
-        },
+        headers,
       };
       const req = https.request(options, (res) => {
         let data = '';
