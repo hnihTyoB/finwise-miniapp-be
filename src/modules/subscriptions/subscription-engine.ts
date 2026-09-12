@@ -132,9 +132,11 @@ export class SubscriptionDiscoveryEngine {
       const countBonus = Math.min(1.0, sorted.length / 5);
       const confidenceScore = Math.min(0.99, Math.round((regularity * 0.7 + countBonus * 0.3) * 100) / 100);
 
-      // Price drift detection (> 3% increase)
+      // Price drift detection (> 8% increase).
+      // 8% guards against minor currency-conversion fluctuations for foreign-currency
+      // subscriptions while still catching real plan price increases (typically 10–30%).
       const driftPercent = ((latestAmount - avgAmount) / avgAmount) * 100;
-      const isPriceDrift = driftPercent > 3.0;
+      const isPriceDrift = driftPercent > 8.0;
 
       // Check if already linked to a user reminder
       const isLinkedToReminder = existingReminderTitles.has(cleanMerchant.toLowerCase());

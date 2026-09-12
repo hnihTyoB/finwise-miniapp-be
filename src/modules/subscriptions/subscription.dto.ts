@@ -21,8 +21,11 @@ export interface DiscoveredSubscriptionDto {
 export interface ConvertSubscriptionToReminderDto {
   merchantName: string;
   amount: string;
+  currency?: string;
   frequency: ReminderFrequency;
-  remindAt: string; // ISO date string
+  /** Renewal date at 09:00 Vietnam time (ISO). Actual trigger = remindAt − remindDaysBefore days. */
+  remindAt: string;
+  remindDaysBefore?: number; // 0 = same day, default: 2 for MONTHLY, 7 for YEARLY, 0 otherwise
   categoryId?: string;
 }
 

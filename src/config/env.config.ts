@@ -92,6 +92,17 @@ export const envConfig = {
       const value = parseInt(process.env.NOTIFICATION_BACKOFF_BASE_DELAY_MS || '60000', 10);
       return Number.isFinite(value) && value >= 1000 && value <= 600000 ? value : 60000;
     })(),
+    // How often (ms) the worker scans all active users for newly discovered subscriptions.
+    // Defaults to once every 24 hours. Set to 0 to disable subscription scanning.
+    subscriptionScanIntervalMs: (() => {
+      const value = parseInt(
+        process.env.NOTIFICATION_SUBSCRIPTION_SCAN_INTERVAL_MS || '86400000',
+        10,
+      );
+      return Number.isFinite(value) && value >= 3_600_000 && value <= 86_400_000
+        ? value
+        : 86_400_000;
+    })(),
   },
   webhooks: {
     concurrency: (() => {

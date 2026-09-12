@@ -4,6 +4,7 @@ import { NotificationDeliveryService } from './notification-delivery.service';
 import { NotificationService } from './notification.service';
 import { RecurringTransactionService } from '../recurring-transactions/recurring-transaction.service';
 import { BudgetService } from '../budgets/budget.service';
+import { SubscriptionService } from '../subscriptions/subscription.service';
 
 import { lockService } from '../../common/services/lock.service';
 
@@ -13,9 +14,11 @@ export class NotificationWorker {
   private readonly deliveryService = new NotificationDeliveryService();
   private readonly recurringTransactionService = new RecurringTransactionService();
   private readonly budgetService = new BudgetService();
+  private readonly subscriptionService = new SubscriptionService();
   private timer: NodeJS.Timeout | null = null;
   private running = false;
   private lastFinancialScanAt = 0;
+  private lastSubscriptionScanAt = 0;
 
   start() {
     if (!envConfig.notifications.workerEnabled || this.timer) {
@@ -89,6 +92,23 @@ export class NotificationWorker {
           this.lastFinancialScanAt = now.getTime();
         } catch (error) {
           console.error('Notification worker failed to scan financial alerts', error);
+        }
+      }
+
+      if (
+        now.getTime() - this.lastSubscriptionScanAt
+        >= envConfig.notifications.subscriptionScanIntervalMs
+      ) {
+        try {
+          const result = await this.subscriptionService.scanAndNotifyNewDiscoveries();
+          this.lastSubscriptionScanAt = now.getTime();
+          if (result.notificationsSent > 0) {
+            console.info(
+              `[NotificationWorker] Subscription scan: ${result.usersScanned} users, ${result.notificationsSent} notifications sent`,
+            );
+          }
+        } catch (error) {
+          console.error('Notification worker failed to scan subscriptions', error);
         }
       }
     } finally {

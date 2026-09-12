@@ -62,6 +62,14 @@ File này chỉ lưu sự thật và quyết định dài hạn giúp các phiê
 - Reminder hỗ trợ `ONCE`, `DAILY`, `WEEKLY`, `MONTHLY`, `YEARLY`, có khoảng lặp và ngày kết
   thúc. Worker nền trong process xử lý reminder, cảnh báo ngân sách/mục tiêu và retry delivery;
   có thể tắt hoặc chỉnh chu kỳ bằng các biến `NOTIFICATION_*`.
+- Subscription discovery dùng `SubscriptionDiscoveryEngine` phân tích 180 ngày giao dịch EXPENSE để
+  phát hiện gói cước định kỳ. Threshold `isPriceDrift` là 8% (không phải 3%) để tránh false positive
+  từ biến động tỷ giá ngoại tệ. Message nhắc nhở dùng `currency` thực tế của subscription thay vì
+  hardcode VND. Worker nền chạy `scanAndNotifyNewDiscoveries()` theo chu kỳ `subscriptionScanIntervalMs`
+  (mặc định 24h, env: `NOTIFICATION_SUBSCRIPTION_SCAN_INTERVAL_MS`), duyệt user theo cursor batch 50,
+  chỉ notify các subscription có `confidenceScore >= 0.85` và chưa được link với reminder; dedupKey
+  theo ngày tránh gửi lặp. Dùng `NotificationType.SYSTEM` — không cần thêm enum/migration mới.
+  API convert-to-reminder hỗ trợ `remindDaysBefore` (0-30 ngày, mặc định: 2 ngày cho MONTHLY, 7 ngày cho YEARLY, 0 ngày cho WEEKLY/DAILY); ngày kích hoạt thực tế `remindAt` và `nextTriggerAt` được trừ tương ứng từ ngày gia hạn gốc.
 - Giao dịch tự động định kỳ lưu template/lịch riêng với `DAILY`, `WEEKLY`, `MONTHLY`, `YEARLY`,
   hỗ trợ pause/resume, ngày kết thúc và chính sách `SKIP`/`CATCH_UP`. Worker dùng business date
   UTC+7, distributed lock và occurrence unique `(scheduleId, scheduledFor)`; bản ghi Transaction
