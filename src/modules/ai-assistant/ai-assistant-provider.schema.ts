@@ -166,3 +166,15 @@ export const recommendationsJsonSchema = {
     },
   },
 } satisfies Record<string, unknown>;
+
+export const exchangeRateJsonSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['from', 'to', 'rate', 'note'],
+  properties: {
+    from: { type: 'string' },
+    to: { type: 'string' },
+    rate: { type: 'number' },
+    note: { type: 'string' },
+  },
+} satisfies Record<string, unknown>;

@@ -8,6 +8,7 @@ import { receiptUploadMiddleware } from '../transactions/transaction-upload.midd
 import { AIAssistantController } from './ai-assistant.controller';
 import {
   categorizeTransactionSchema,
+  currencyExchangeRateSchema,
   extractReceiptSchema,
   financialChatSchema,
   financialInsightsSchema,
@@ -42,6 +43,11 @@ router.post(
   '/recommendations',
   validate(financialRecommendationsSchema),
   controller.recommend,
+);
+router.post(
+  '/exchange-rate',
+  validate(currencyExchangeRateSchema),
+  controller.getExchangeRate,
 );
 
 export default router;

@@ -32,6 +32,22 @@ export interface FinancialRecommendationsDto extends AIAnalysisScopeDto {
   priority: 'BALANCED' | 'REDUCE_SPENDING' | 'GROW_SAVINGS';
 }
 
+export interface CurrencyExchangeRateDto {
+  from: string;
+  to: string;
+  amount?: number;
+}
+
+export interface ExchangeRateResultDto {
+  from: string;
+  to: string;
+  rate: number;
+  amount: number;
+  convertedAmount: number;
+  formattedRate?: string;
+  note?: string;
+}
+
 export interface AIResponseMetaDto {
   provider: string;
   model: string;

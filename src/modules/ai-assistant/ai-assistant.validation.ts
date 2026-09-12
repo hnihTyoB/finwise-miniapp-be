@@ -93,3 +93,23 @@ export const financialRecommendationsSchema = z
       .default('BALANCED'),
   })
   .superRefine(validateDateRange);
+
+export const currencyExchangeRateSchema = z.object({
+  from: z
+    .string({ required_error: 'From currency is required' })
+    .trim()
+    .length(3, 'From currency must be a 3-letter code')
+    .regex(/^[A-Za-z]{3}$/, 'From currency must contain only letters')
+    .transform((value) => value.toUpperCase()),
+  to: z
+    .string({ required_error: 'To currency is required' })
+    .trim()
+    .length(3, 'To currency must be a 3-letter code')
+    .regex(/^[A-Za-z]{3}$/, 'To currency must contain only letters')
+    .transform((value) => value.toUpperCase()),
+  amount: z
+    .number()
+    .positive('Amount must be positive')
+    .optional()
+    .default(1),
+});

@@ -16,11 +16,12 @@ import {
   AIAnalysisScopeDto,
   AIServiceResult,
   CategorizeTransactionDto,
+  CurrencyExchangeRateDto,
+  ExchangeRateResultDto,
   ExtractReceiptDto,
   FinancialChatDto,
   FinancialInsightsDto,
   FinancialRecommendationsDto,
-
 } from './ai-assistant.dto';
 import {
   AIAssistantRepository,
@@ -30,6 +31,7 @@ import {
 import {
   chatJsonSchema,
   classificationJsonSchema,
+  exchangeRateJsonSchema,
   insightsJsonSchema,
   receiptJsonSchema,
   recommendationsJsonSchema,
@@ -37,6 +39,7 @@ import {
 import {
   chatResponseSchema,
   classificationResponseSchema,
+  exchangeRateResponseSchema,
   insightsResponseSchema,
   receiptResponseSchema,
   recommendationsResponseSchema,
@@ -233,6 +236,71 @@ export class AIAssistantService {
       recommendationsResponseSchema,
       { userId, feature: 'RECOMMENDATIONS' },
     );
+  }
+
+  async getExchangeRate(
+    userId: string,
+    input: CurrencyExchangeRateDto,
+  ): Promise<AIServiceResult<ExchangeRateResultDto>> {
+    const from = input.from.toUpperCase().trim();
+    const to = input.to.toUpperCase().trim();
+    const amount = input.amount !== undefined && input.amount > 0 ? input.amount : 1;
+
+    // Optimization: When base and target currencies are identical, bypass AI call (0 tokens)
+    if (from === to) {
+      return {
+        data: {
+          from,
+          to,
+          rate: 1,
+          amount,
+          convertedAmount: amount,
+          formattedRate: `1 ${from} = 1 ${to}`,
+          note: 'Tỷ giá giữa cùng một loại tiền tệ',
+        },
+        meta: {
+          provider: 'system',
+          model: 'identity',
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        },
+      };
+    }
+
+    const systemInstruction = [
+      'You are a professional financial assistant specializing in foreign exchange rates and currency markets.',
+      'Provide the most accurate, realistic real-time or prevailing market exchange rate for the requested currency pair.',
+      'Rate must represent: 1 unit of base currency [from] = how many units of target currency [to].',
+      'For example: 1 USD to VND is approximately 25,400, so rate is 25400. 1 VND to USD is approximately 0.000039.',
+      'Return a positive number for rate. Keep note concise (under 200 chars), explaining the approximate reference market/date or rate source in Vietnamese.',
+    ].join(' ');
+
+    const promptText = `Provide the current accurate market exchange rate from ${from} to ${to}. Rate represents how many ${to} equal 1 ${from}.`;
+
+    const response = await this.generate(
+      {
+        systemInstruction,
+        parts: [{ text: promptText }],
+        responseJsonSchema: exchangeRateJsonSchema,
+      },
+      exchangeRateResponseSchema,
+      { userId, feature: 'CURRENCY_EXCHANGE_RATE' },
+    );
+
+    const rate = response.data.rate;
+    const convertedAmount = Number((amount * rate).toFixed(4));
+
+    return {
+      data: {
+        from,
+        to,
+        rate,
+        amount,
+        convertedAmount,
+        formattedRate: `1 ${from} = ${rate.toLocaleString('en-US', { maximumFractionDigits: 6 })} ${to}`,
+        note: response.data.note ?? undefined,
+      },
+      meta: response.meta,
+    };
   }
 
   private async generateWithContext<TSchema extends z.ZodTypeAny>(

@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 import {
   CategorizeTransactionDto,
+  CurrencyExchangeRateDto,
   ExtractReceiptDto,
   FinancialChatDto,
   FinancialInsightsDto,
@@ -69,6 +70,18 @@ export class AIAssistantController {
       const result = await this.service.recommend(
         req.user.id,
         req.body as FinancialRecommendationsDto,
+      );
+      res.json({ success: true, ...result });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getExchangeRate = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await this.service.getExchangeRate(
+        req.user.id,
+        req.body as CurrencyExchangeRateDto,
       );
       res.json({ success: true, ...result });
     } catch (error) {

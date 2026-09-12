@@ -205,3 +205,13 @@ export const recommendationsResponseSchema = z.object({
     })).max(10)
   ),
 });
+
+export const exchangeRateResponseSchema = z.object({
+  from: currencySchema,
+  to: currencySchema,
+  rate: z.preprocess(
+    (val) => (typeof val === 'string' ? parseFloat(val) : val),
+    z.number().positive(),
+  ),
+  note: z.preprocess(cleanStringOrNull, z.string().trim().max(500).nullable()).optional(),
+});
