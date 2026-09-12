@@ -19,9 +19,13 @@ export class AdminAiRepository {
     latencyMs: number;
     errorMessage?: string | null;
   }) {
+    const isValidUuid =
+      typeof data.userId === 'string' &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.userId);
+
     return prisma.aiRequestLog.create({
       data: {
-        userId: data.userId ?? null,
+        userId: isValidUuid ? data.userId : null,
         feature: data.feature,
         provider: data.provider,
         model: data.model,

@@ -121,39 +121,40 @@ describe('Currency Exchange Rate AI & Validation Tests', () => {
       expect(getAIProvider).not.toHaveBeenCalled();
     });
 
-    it('should call AI provider when currencies differ and return accurate calculation', async () => {
-      const mockGenerate = jest.fn().mockResolvedValue({
-        data: {
-          from: 'USD',
-          to: 'VND',
-          rate: 25400,
-          note: 'Tỷ giá tham khảo Vietcombank',
-        },
-        provider: 'gemini',
-        model: 'gemini-1.5-flash',
-        usage: { promptTokens: 35, completionTokens: 18, totalTokens: 53 },
-      });
-
-      (getAIProvider as jest.Mock).mockReturnValue({
-        generateStructured: mockGenerate,
-      });
-
+    it('should fetch live market rate without calling AI (0 tokens)', async () => {
       const result = await service.getExchangeRate('test-user-id', {
         from: 'USD',
         to: 'VND',
         amount: 10,
       });
 
-      expect(mockGenerate).toHaveBeenCalled();
+      expect(getAIProvider).not.toHaveBeenCalled();
       expect(result.data.from).toBe('USD');
       expect(result.data.to).toBe('VND');
-      expect(result.data.rate).toBe(25400);
+      expect(result.data.rate).toBeGreaterThan(20000);
       expect(result.data.amount).toBe(10);
-      expect(result.data.convertedAmount).toBe(254000);
-      expect(result.data.formattedRate).toContain('1 USD = 25,400 VND');
-      expect(result.data.note).toBe('Tỷ giá tham khảo Vietcombank');
-      expect(result.meta.provider).toBe('gemini');
-      expect(result.meta.usage.totalTokens).toBe(53);
+      expect(result.data.convertedAmount).toBeCloseTo(result.data.rate * 10, 1);
+      expect(result.meta.usage.totalTokens).toBe(0);
+    });
+
+    it('should fallback gracefully to baseline offline rate if live market is unreachable', async () => {
+      jest.spyOn(service as any, 'fetchLiveMarketRate').mockResolvedValue(null);
+
+      const result = await service.getExchangeRate('test-user-id', {
+        from: 'USD',
+        to: 'VND',
+        amount: 2,
+      });
+
+      expect(getAIProvider).not.toHaveBeenCalled();
+      expect(result.data.from).toBe('USD');
+      expect(result.data.to).toBe('VND');
+      expect(result.data.rate).toBe(25922.52);
+      expect(result.data.amount).toBe(2);
+      expect(result.data.convertedAmount).toBeCloseTo(51845.04, 1);
+      expect(result.data.note).toContain('ngoại tuyến');
+      expect(result.meta.provider).toBe('offline-fallback');
+      expect(result.meta.usage.totalTokens).toBe(0);
     });
   });
 });

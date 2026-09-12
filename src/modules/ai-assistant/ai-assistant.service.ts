@@ -14,6 +14,7 @@ import { systemSettingService } from '../system-settings/system-setting.service'
 import { adminAiRepository } from './admin-ai.repository';
 import {
   AIAnalysisScopeDto,
+  AIResponseMetaDto,
   AIServiceResult,
   CategorizeTransactionDto,
   CurrencyExchangeRateDto,
@@ -65,6 +66,27 @@ interface ResolvedContext {
   currency?: string;
   record: AIFinancialContextRecord;
   promptData: Record<string, unknown>;
+}
+
+const DEFAULT_FALLBACK_RATES: Record<string, number> = {
+  VND: 1,
+  USD: 25922.52,
+  EUR: 30067.05,
+  JPY: 168.3,
+  KRW: 19.3,
+  CNY: 3864.5,
+  GBP: 35022.8,
+  THB: 784.2,
+  SGD: 20448.9,
+  AUD: 18591.4,
+  CAD: 18710.2,
+};
+
+function getFallbackExchangeRate(from: string, to: string): number {
+  if (from === to) return 1;
+  const fromInVnd = DEFAULT_FALLBACK_RATES[from] ?? 1;
+  const toInVnd = DEFAULT_FALLBACK_RATES[to] ?? 1;
+  return toInVnd > 0 ? fromInVnd / toInVnd : 1;
 }
 
 export class AIAssistantService {
@@ -238,6 +260,67 @@ export class AIAssistantService {
     );
   }
 
+  private async fetchLiveMarketRate(
+    from: string,
+    to: string,
+  ): Promise<{ rate: number; source: string; date?: string } | null> {
+    const fromLower = from.toLowerCase();
+    const toLower = to.toLowerCase();
+
+    // 1. Try FloatRates (real-time interbank market rate feed)
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3500);
+      const res = await fetch(`https://www.floatrates.com/daily/${fromLower}.json`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (res.ok) {
+        const data = (await res.json()) as Record<string, { rate: string | number; date?: string; name?: string }>;
+        if (data[toLower]?.rate) {
+          const rate = parseFloat(String(data[toLower].rate));
+          if (!isNaN(rate) && rate > 0) {
+            return {
+              rate,
+              source: 'Thị trường liên ngân hàng (FloatRates)',
+              date: data[toLower].date,
+            };
+          }
+        }
+      }
+    } catch {
+      // Ignore network errors and try next source
+    }
+
+    // 2. Try Open Exchange Rates API
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3500);
+      const res = await fetch(`https://open.er-api.com/v6/latest/${from.toUpperCase()}`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (res.ok) {
+        const data = (await res.json()) as {
+          rates?: Record<string, number>;
+          time_last_update_utc?: string;
+        };
+        const targetRate = data.rates?.[to.toUpperCase()];
+        if (typeof targetRate === 'number' && targetRate > 0) {
+          return {
+            rate: targetRate,
+            source: 'Thị trường mở (Open Exchange Rates)',
+            date: data.time_last_update_utc,
+          };
+        }
+      }
+    } catch {
+      // Ignore network errors
+    }
+
+    return null;
+  }
+
   async getExchangeRate(
     userId: string,
     input: CurrencyExchangeRateDto,
@@ -266,27 +349,14 @@ export class AIAssistantService {
       };
     }
 
-    const systemInstruction = [
-      'You are a professional financial assistant specializing in foreign exchange rates and currency markets.',
-      'Provide the most accurate, realistic real-time or prevailing market exchange rate for the requested currency pair.',
-      'Rate must represent: 1 unit of base currency [from] = how many units of target currency [to].',
-      'For example: 1 USD to VND is approximately 25,400, so rate is 25400. 1 VND to USD is approximately 0.000039.',
-      'Return a positive number for rate. Keep note concise (under 200 chars), explaining the approximate reference market/date or rate source in Vietnamese.',
-    ].join(' ');
+    // Ground AI with real-time verified market data
+    const liveMarket = await this.fetchLiveMarketRate(from, to);
 
-    const promptText = `Provide the current accurate market exchange rate from ${from} to ${to}. Rate represents how many ${to} equal 1 ${from}.`;
+    const rate = liveMarket ? liveMarket.rate : getFallbackExchangeRate(from, to);
+    const note = liveMarket
+      ? `Tỷ giá thị trường thời gian thực (${liveMarket.source})`
+      : 'Tỷ giá thị trường cơ sở (ngoại tuyến)';
 
-    const response = await this.generate(
-      {
-        systemInstruction,
-        parts: [{ text: promptText }],
-        responseJsonSchema: exchangeRateJsonSchema,
-      },
-      exchangeRateResponseSchema,
-      { userId, feature: 'CURRENCY_EXCHANGE_RATE' },
-    );
-
-    const rate = response.data.rate;
     const convertedAmount = Number((amount * rate).toFixed(4));
 
     return {
@@ -297,9 +367,13 @@ export class AIAssistantService {
         amount,
         convertedAmount,
         formattedRate: `1 ${from} = ${rate.toLocaleString('en-US', { maximumFractionDigits: 6 })} ${to}`,
-        note: response.data.note ?? undefined,
+        note,
       },
-      meta: response.meta,
+      meta: {
+        provider: liveMarket ? 'interbank-feed' : 'offline-fallback',
+        model: liveMarket ? liveMarket.source : 'standard-rates',
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      },
     };
   }
 
