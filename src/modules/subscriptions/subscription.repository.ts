@@ -58,6 +58,25 @@ export class SubscriptionRepository {
     return new Set(reminders.map((r) => r.title.toLowerCase()));
   }
 
+  async getExistingRecurringScheduleDescriptions(userId: string): Promise<Set<string>> {
+    const schedules = await prisma.recurringTransactionSchedule.findMany({
+      where: {
+        userId,
+        isActive: true,
+        deletedAt: null,
+      },
+      select: {
+        description: true,
+      },
+    });
+
+    return new Set(
+      schedules
+        .map((s) => s.description?.toLowerCase().trim())
+        .filter((desc): desc is string => Boolean(desc)),
+    );
+  }
+
   async convertToReminder(userId: string, input: ConvertSubscriptionToReminderDto) {
     const defaultDays = input.frequency === 'MONTHLY' ? 2 : input.frequency === 'YEARLY' ? 7 : 0;
     const remindDaysBefore = Math.max(0, input.remindDaysBefore ?? defaultDays);

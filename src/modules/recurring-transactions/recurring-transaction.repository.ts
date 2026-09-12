@@ -47,7 +47,10 @@ export type RecurringTransactionScheduleRecord = Prisma.RecurringTransactionSche
 
 export type RecurringTransactionDbClient = Prisma.TransactionClient;
 
-function toScheduleResponse(record: RecurringTransactionScheduleRecord) {
+function toScheduleResponse(
+  record: RecurringTransactionScheduleRecord,
+  remindDaysBefore?: number | null,
+) {
   const { userId: _userId, ...schedule } = record;
   return {
     ...schedule,
@@ -55,6 +58,7 @@ function toScheduleResponse(record: RecurringTransactionScheduleRecord) {
     anchorDate: prismaDateToBusinessDate(schedule.anchorDate),
     endDate: schedule.endDate ? prismaDateToBusinessDate(schedule.endDate) : null,
     nextRunAt: schedule.nextRunAt ? prismaDateToBusinessDate(schedule.nextRunAt) : null,
+    remindDaysBefore: remindDaysBefore ?? null,
   };
 }
 
@@ -85,7 +89,7 @@ export class RecurringTransactionRepository {
       ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
     };
     const skip = (query.page - 1) * query.limit;
-    const [records, total] = await prisma.$transaction([
+    const [records, total, reminders] = await prisma.$transaction([
       prisma.recurringTransactionSchedule.findMany({
         where,
         select: scheduleSelect,
@@ -94,10 +98,30 @@ export class RecurringTransactionRepository {
         take: query.limit,
       }),
       prisma.recurringTransactionSchedule.count({ where }),
+      prisma.reminder.findMany({
+        where: {
+          userId,
+          actionUrl: { startsWith: '/recurring-transactions?id=' },
+          isActive: true,
+        },
+        select: { actionUrl: true },
+      }),
     ]);
 
+    const reminderMap = new Map<string, number>();
+    for (const r of reminders) {
+      if (r.actionUrl) {
+        const match = r.actionUrl.match(/id=([^&]+)(?:&remindDaysBefore=(\d+))?/);
+        if (match) {
+          const id = match[1];
+          const days = match[2] !== undefined ? parseInt(match[2], 10) : 0;
+          reminderMap.set(id, days);
+        }
+      }
+    }
+
     return {
-      data: records.map(toScheduleResponse),
+      data: records.map((record) => toScheduleResponse(record, reminderMap.get(record.id))),
       meta: {
         total,
         page: query.page,
@@ -108,11 +132,28 @@ export class RecurringTransactionRepository {
   }
 
   async findById(userId: string, id: string) {
-    const record = await prisma.recurringTransactionSchedule.findFirst({
-      where: { id, userId, deletedAt: null },
-      select: scheduleSelect,
-    });
-    return record ? toScheduleResponse(record) : null;
+    const [record, reminder] = await Promise.all([
+      prisma.recurringTransactionSchedule.findFirst({
+        where: { id, userId, deletedAt: null },
+        select: scheduleSelect,
+      }),
+      prisma.reminder.findFirst({
+        where: {
+          userId,
+          actionUrl: { startsWith: `/recurring-transactions?id=${id}` },
+          isActive: true,
+        },
+        select: { actionUrl: true },
+      }),
+    ]);
+
+    let remindDaysBefore: number | null = null;
+    if (reminder?.actionUrl) {
+      const match = reminder.actionUrl.match(/&remindDaysBefore=(\d+)/);
+      remindDaysBefore = match ? parseInt(match[1], 10) : 0;
+    }
+
+    return record ? toScheduleResponse(record, remindDaysBefore) : null;
   }
 
   async findExistingSubscriptionSchedule(

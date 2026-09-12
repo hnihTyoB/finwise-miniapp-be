@@ -24,6 +24,7 @@ export interface CreateRecurringTransactionDto {
   endDate?: BusinessDate | null;
   missedRunPolicy: RecurringTransactionMissedRunPolicy;
   isActive: boolean;
+  remindDaysBefore?: number | null;
 }
 
 export type UpdateRecurringTransactionDto = Partial<Omit<

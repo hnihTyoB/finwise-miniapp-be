@@ -39,6 +39,7 @@ const scheduleFields = {
   anchorDate: dateSchema,
   endDate: dateSchema.nullable().optional(),
   missedRunPolicy: missedRunPolicySchema.default('SKIP'),
+  remindDaysBefore: z.coerce.number().int().min(0).max(30).nullable().optional(),
 };
 
 export const recurringTransactionParamsSchema = z.object({

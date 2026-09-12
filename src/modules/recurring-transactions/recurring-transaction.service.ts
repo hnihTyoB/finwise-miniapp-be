@@ -3,14 +3,20 @@ import {
   NotificationSourceType,
   NotificationType,
   Prisma,
+  RecurringTransactionFrequency,
   RecurringTransactionMissedRunPolicy,
+  ReminderFrequency,
+  ReminderType,
 } from '@prisma/client';
 import { AppError } from '../../common/errors/app-error';
 import { ERROR_CODE } from '../../common/errors/error-code';
 import {
+  addBusinessDays,
   businessDateToPrismaDate,
+  businessWallTimeToInstant,
   BusinessDate,
   instantToBusinessDate,
+  instantToBusinessWallTime,
   prismaDateToBusinessDate,
 } from '../../common/date-time/business-time';
 import { cacheService } from '../../common/services/cache.service';
@@ -76,7 +82,7 @@ export class RecurringTransactionService {
         data.type,
         transaction,
       );
-      return this.repository.create({
+      const created = await this.repository.create({
         userId,
         walletId: data.walletId,
         categoryId: data.categoryId,
@@ -92,6 +98,12 @@ export class RecurringTransactionService {
         missedRunPolicy: data.missedRunPolicy,
         isActive: data.isActive && nextRunAt !== null,
       }, transaction);
+
+      if (data.remindDaysBefore !== undefined) {
+        await this.syncReminder(userId, created.id, created, data.remindDaysBefore, transaction);
+      }
+
+      return created;
     });
   }
 
@@ -141,7 +153,7 @@ export class RecurringTransactionService {
         );
       }
 
-      return this.repository.update(id, {
+      const updated = await this.repository.update(id, {
         walletId,
         categoryId,
         amount: data.amount ?? current.amount,
@@ -156,12 +168,25 @@ export class RecurringTransactionService {
         missedRunPolicy,
         isActive: current.isActive && nextRunAt !== null,
       }, transaction);
+
+      if (data.remindDaysBefore !== undefined) {
+        await this.syncReminder(userId, id, updated, data.remindDaysBefore, transaction);
+      }
+
+      return updated;
     });
   }
 
   async pause(userId: string, id: string) {
     return this.repository.runSerializable(async (transaction) => {
       await this.findRecord(userId, id, transaction);
+      await transaction.reminder.updateMany({
+        where: {
+          userId,
+          actionUrl: { startsWith: `/recurring-transactions?id=${id}` },
+        },
+        data: { isActive: false },
+      });
       return this.repository.update(id, { isActive: false }, transaction);
     });
   }
@@ -206,6 +231,13 @@ export class RecurringTransactionService {
           ERROR_CODE.RECURRING_TRANSACTION_SCHEDULE_INVALID,
         );
       }
+      await transaction.reminder.updateMany({
+        where: {
+          userId,
+          actionUrl: { startsWith: `/recurring-transactions?id=${id}` },
+        },
+        data: { isActive: true },
+      });
       return this.repository.update(id, {
         isActive: true,
         nextRunAt: businessDateToPrismaDate(nextRunAt),
@@ -216,6 +248,12 @@ export class RecurringTransactionService {
   async remove(userId: string, id: string) {
     await this.repository.runSerializable(async (transaction) => {
       await this.findRecord(userId, id, transaction);
+      await transaction.reminder.deleteMany({
+        where: {
+          userId,
+          actionUrl: { startsWith: `/recurring-transactions?id=${id}` },
+        },
+      });
       await this.repository.archive(id, transaction);
     });
     return { id };
@@ -481,4 +519,76 @@ export class RecurringTransactionService {
       );
     }
   }
+
+  private async syncReminder(
+    userId: string,
+    scheduleId: string,
+    schedule: {
+      description?: string | null;
+      frequency: RecurringTransactionFrequency;
+      repeatInterval: number;
+      anchorDate: BusinessDate;
+      endDate?: BusinessDate | null;
+      nextRunAt?: BusinessDate | null;
+      isActive: boolean;
+    },
+    remindDaysBefore: number | null | undefined,
+    transaction: RecurringTransactionDbClient,
+  ) {
+    await transaction.reminder.deleteMany({
+      where: {
+        userId,
+        actionUrl: { startsWith: `/recurring-transactions?id=${scheduleId}` },
+      },
+    });
+
+    if (remindDaysBefore === null || remindDaysBefore === undefined) {
+      return;
+    }
+
+    const nextRunBusinessDate = schedule.nextRunAt ?? schedule.anchorDate;
+    const reminderBusinessDate = addBusinessDays(nextRunBusinessDate, -remindDaysBefore);
+
+    const remindAt = businessWallTimeToInstant(reminderBusinessDate, '09:00:00');
+
+    const now = new Date();
+    let nextTriggerAt: Date | null = remindAt;
+    if (remindAt <= now) {
+      nextTriggerAt = now;
+    }
+
+    const endAt = schedule.endDate
+      ? businessWallTimeToInstant(
+          addBusinessDays(schedule.endDate, -remindDaysBefore),
+          '23:59:59',
+        )
+      : null;
+
+    const frequencyMap: Record<RecurringTransactionFrequency, ReminderFrequency> = {
+      [RecurringTransactionFrequency.DAILY]: ReminderFrequency.DAILY,
+      [RecurringTransactionFrequency.WEEKLY]: ReminderFrequency.WEEKLY,
+      [RecurringTransactionFrequency.MONTHLY]: ReminderFrequency.MONTHLY,
+      [RecurringTransactionFrequency.YEARLY]: ReminderFrequency.YEARLY,
+    };
+
+    const actionUrl = `/recurring-transactions?id=${scheduleId}&remindDaysBefore=${remindDaysBefore}`;
+    const desc = schedule.description ? ` (${schedule.description})` : '';
+
+    await transaction.reminder.create({
+      data: {
+        userId,
+        type: ReminderType.RECURRING_PAYMENT,
+        title: `Nhắc thanh toán giao dịch định kỳ${desc}`,
+        message: `Giao dịch định kỳ${desc} sắp đến hạn thực hiện.`,
+        remindAt,
+        frequency: frequencyMap[schedule.frequency] ?? ReminderFrequency.MONTHLY,
+        repeatInterval: schedule.repeatInterval,
+        endAt,
+        nextTriggerAt: schedule.isActive ? nextTriggerAt : null,
+        actionUrl,
+        isActive: schedule.isActive,
+      },
+    });
+  }
 }
+

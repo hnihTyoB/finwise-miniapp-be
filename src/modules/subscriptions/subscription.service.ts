@@ -22,14 +22,16 @@ export class SubscriptionService {
   private readonly notificationService = new NotificationService();
 
   async discoverSubscriptions(userId: string): Promise<DiscoveryReportDto> {
-    const [transactions, existingReminders] = await Promise.all([
+    const [transactions, existingReminders, existingSchedules] = await Promise.all([
       this.repository.getHistoricalExpenseTransactions(userId, SCAN_HISTORY_DAYS),
       this.repository.getExistingReminderTitles(userId),
+      this.repository.getExistingRecurringScheduleDescriptions(userId),
     ]);
 
     const items = SubscriptionDiscoveryEngine.discover(
       transactions,
       existingReminders,
+      existingSchedules,
     );
 
     return {
@@ -81,7 +83,7 @@ export class SubscriptionService {
 
           // Only notify for high-confidence, unlinked subscriptions
           const candidates = report.items.filter(
-            (item) => item.confidenceScore >= 0.85 && !item.isLinkedToReminder,
+            (item) => item.confidenceScore >= 0.85 && !item.isLinkedToSchedule && !item.isLinkedToReminder,
           );
 
           for (const item of candidates) {
@@ -93,11 +95,11 @@ export class SubscriptionService {
                 : NotificationPriority.NORMAL,
               title: item.isPriceDrift
                 ? `Giá ${item.merchantName} đã thay đổi`
-                : `Phát hiện gói cước định kỳ: ${item.merchantName}`,
+                : `Phát hiện giao dịch định kỳ: ${item.merchantName}`,
               message: item.isPriceDrift
-                ? `${item.merchantName} tăng giá ${item.priceDriftPercentage?.toFixed(1)}% so với trung bình. Muốn theo dõi không?`
-                : `${item.merchantName} xuất hiện ${item.occurrenceCount} lần (${item.frequency.toLowerCase()}). Thêm vào danh sách theo dõi?`,
-              actionUrl: '/subscriptions',
+                ? `${item.merchantName} tăng giá ${item.priceDriftPercentage?.toFixed(1)}% so với trung bình. Thêm vào lịch tự động?`
+                : `${item.merchantName} xuất hiện ${item.occurrenceCount} lần (${item.frequency.toLowerCase()}). Thêm vào lịch giao dịch tự động?`,
+              actionUrl: '/recurring-transactions',
               sourceType: NotificationSourceType.SYSTEM,
               sourceId: null,
               data: {

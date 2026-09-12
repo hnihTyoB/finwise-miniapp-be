@@ -67,9 +67,10 @@ File này chỉ lưu sự thật và quyết định dài hạn giúp các phiê
   từ biến động tỷ giá ngoại tệ. Message nhắc nhở dùng `currency` thực tế của subscription thay vì
   hardcode VND. Worker nền chạy `scanAndNotifyNewDiscoveries()` theo chu kỳ `subscriptionScanIntervalMs`
   (mặc định 24h, env: `NOTIFICATION_SUBSCRIPTION_SCAN_INTERVAL_MS`), duyệt user theo cursor batch 50,
-  chỉ notify các subscription có `confidenceScore >= 0.85` và chưa được link với reminder; dedupKey
-  theo ngày tránh gửi lặp. Dùng `NotificationType.SYSTEM` — không cần thêm enum/migration mới.
-  API convert-to-reminder hỗ trợ `remindDaysBefore` (0-30 ngày, mặc định: 2 ngày cho MONTHLY, 7 ngày cho YEARLY, 0 ngày cho WEEKLY/DAILY); ngày kích hoạt thực tế `remindAt` và `nextTriggerAt` được trừ tương ứng từ ngày gia hạn gốc.
+   chỉ notify các subscription có `confidenceScore >= 0.85` và chưa được link với recurring schedule hoặc reminder; dedupKey
+   theo ngày tránh gửi lặp. Notification dẫn về `actionUrl: /recurring-transactions` để người dùng thêm vào lịch tự động.
+   API discover kiểm tra cả `RecurringTransactionSchedule` (`isLinkedToSchedule`) để không gợi ý lại các khoản đã lên lịch.
+   API convert-to-reminder tiếp tục hỗ trợ `remindDaysBefore` (0-30 ngày) cho các tác vụ cần tạo lịch nhắc.
 - Giao dịch tự động định kỳ lưu template/lịch riêng với `DAILY`, `WEEKLY`, `MONTHLY`, `YEARLY`,
   hỗ trợ pause/resume, ngày kết thúc và chính sách `SKIP`/`CATCH_UP`. Worker dùng business date
   UTC+7, distributed lock và occurrence unique `(scheduleId, scheduledFor)`; bản ghi Transaction
@@ -133,6 +134,7 @@ File này chỉ lưu sự thật và quyết định dài hạn giúp các phiê
   `20260910183000_add_budget_recurrence` thêm cấu hình tự động gia hạn ngân sách (`isRecurring`,
   `autoRenew`, `recurrenceGroupId`, `rolloverMode`, `rolloverAmount`, `autoRenewUntil`), quan hệ phả hệ
   chu kỳ (`parentBudgetId`), enum `BudgetRolloverMode` và ràng buộc duy nhất `(recurrenceGroupId, startDate)`.
+- Giao dịch tự động định kỳ hỗ trợ thông báo nhắc nhở trước hạn thanh toán qua trường tùy chọn `remindDaysBefore` (0–30 ngày). Nhắc nhở được liên kết nguyên tử với bảng Reminder (`type: RECURRING_PAYMENT`, `actionUrl: /recurring-transactions?id=${scheduleId}&remindDaysBefore=${days}`) không cần migration DB; tự động xóa, cập nhật, tạm dừng hoặc khôi phục đồng bộ theo trạng thái của lịch giao dịch. Thuật toán phát hiện Subscription tự động quét giao dịch định kỳ, phát hiện tăng giá cước (> 5.0%), liên kết trực tiếp vào lịch giao dịch tự động và loại trừ các dịch vụ đã được lên lịch.
   Migration history cũ vẫn chưa phản ánh đầy đủ các thay đổi schema của auth đã
   được commit trước đó.
 

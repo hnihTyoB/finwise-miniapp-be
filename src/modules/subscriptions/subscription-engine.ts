@@ -49,6 +49,7 @@ export class SubscriptionDiscoveryEngine {
   static discover(
     transactions: RawSubscriptionTxn[],
     existingReminderTitles: Set<string>,
+    existingScheduleDescriptions: Set<string> = new Set(),
   ): DiscoveredSubscriptionDto[] {
     // Group transactions by (cleanMerchant, currency)
     const groups = new Map<string, RawSubscriptionTxn[]>();
@@ -132,14 +133,16 @@ export class SubscriptionDiscoveryEngine {
       const countBonus = Math.min(1.0, sorted.length / 5);
       const confidenceScore = Math.min(0.99, Math.round((regularity * 0.7 + countBonus * 0.3) * 100) / 100);
 
-      // Price drift detection (> 8% increase).
-      // 8% guards against minor currency-conversion fluctuations for foreign-currency
-      // subscriptions while still catching real plan price increases (typically 10–30%).
+      // Price drift detection (> 5% increase).
+      // 5% guards against minor currency-conversion fluctuations for foreign-currency
+      // subscriptions while catching real plan price increases (typically 7–30%).
       const driftPercent = ((latestAmount - avgAmount) / avgAmount) * 100;
-      const isPriceDrift = driftPercent > 8.0;
+      const isPriceDrift = driftPercent > 5.0;
 
-      // Check if already linked to a user reminder
-      const isLinkedToReminder = existingReminderTitles.has(cleanMerchant.toLowerCase());
+      // Check if already linked to a user reminder or recurring schedule
+      const lowerMerchant = cleanMerchant.toLowerCase();
+      const isLinkedToReminder = existingReminderTitles.has(lowerMerchant);
+      const isLinkedToSchedule = existingScheduleDescriptions.has(lowerMerchant);
 
       const sampleTx = sorted[sorted.length - 1];
 
@@ -159,6 +162,7 @@ export class SubscriptionDiscoveryEngine {
         isPriceDrift,
         priceDriftPercentage: isPriceDrift ? Math.round(driftPercent * 10) / 10 : null,
         isLinkedToReminder,
+        isLinkedToSchedule,
       });
     });
 

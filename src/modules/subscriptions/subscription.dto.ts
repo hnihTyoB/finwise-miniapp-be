@@ -16,6 +16,7 @@ export interface DiscoveredSubscriptionDto {
   isPriceDrift: boolean;
   priceDriftPercentage: number | null;
   isLinkedToReminder: boolean;
+  isLinkedToSchedule?: boolean;
 }
 
 export interface ConvertSubscriptionToReminderDto {
