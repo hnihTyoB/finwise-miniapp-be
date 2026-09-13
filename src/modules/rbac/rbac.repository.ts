@@ -158,11 +158,21 @@ export class RbacRepository {
   }
 
   async getPermissionNamesByRoleId(roleId: string): Promise<string[]> {
-    const rolePermissions = await prisma.rolePermission.findMany({
-      where: { roleId },
-      select: { permission: { select: { name: true } } },
-    });
-    return rolePermissions.map((rp) => rp.permission.name);
+    try {
+      const rows = await prisma.$queryRaw<{ name: string }[]>`
+        SELECT p.name
+        FROM role_permissions rp
+        JOIN permissions p ON rp.permission_id = p.id
+        WHERE rp.role_id = ${roleId}::uuid
+      `;
+      return rows.map((r) => r.name);
+    } catch {
+      const rolePermissions = await prisma.rolePermission.findMany({
+        where: { roleId },
+        include: { permission: true },
+      });
+      return rolePermissions.map((rp) => rp.permission.name);
+    }
   }
 
   async getUserRoleAndPermissions(userId: string) {
@@ -178,15 +188,6 @@ export class RbacRepository {
             id: true,
             name: true,
             isSystem: true,
-            rolePermissions: {
-              select: {
-                permission: {
-                  select: {
-                    name: true,
-                  },
-                },
-              },
-            },
           },
         },
       },
@@ -194,7 +195,7 @@ export class RbacRepository {
 
     if (!user || !user.role) return null;
 
-    const permissions = user.role.rolePermissions.map((rp) => rp.permission.name);
+    const permissions = await this.getPermissionNamesByRoleId(user.roleId);
 
     return {
       userId: user.id,

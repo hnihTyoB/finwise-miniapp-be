@@ -12,6 +12,7 @@ import { SubscriptionRepository } from './subscription.repository';
 import { RecurringTransactionService } from '../recurring-transactions/recurring-transaction.service';
 import { ConvertSubscriptionToRecurringTransactionDto } from '../recurring-transactions/recurring-transaction.dto';
 import { NotificationService } from '../notifications/notification.service';
+import { instantToBusinessDate } from '../../common/date-time/business-time';
 
 const SCAN_BATCH_SIZE = 50;
 const SCAN_HISTORY_DAYS = 180;
@@ -67,7 +68,7 @@ export class SubscriptionService {
     let cursor: string | undefined;
     let usersScanned = 0;
     let notificationsSent = 0;
-    const scanDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD, resets dedup daily
+    const scanDate = instantToBusinessDate(new Date()); // Business date (Asia/Ho_Chi_Minh), resets dedup daily
 
     do {
       const { userIds, nextCursor } = await this.repository.findActiveUserIdsBatch(

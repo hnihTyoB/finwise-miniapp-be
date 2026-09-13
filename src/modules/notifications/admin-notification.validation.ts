@@ -46,3 +46,7 @@ export const updateChannelConfigSchema = z.object({
   zaloEnabled: z.boolean().optional(),
   pushEnabled: z.boolean().optional(),
 });
+
+export const adminParamIdSchema = z.object({
+  id: z.string().uuid('Invalid ID parameter format'),
+});

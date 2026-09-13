@@ -66,8 +66,7 @@ export async function apiKeyMiddleware(
     if (apiKey.ipWhitelist && apiKey.ipWhitelist.length > 0) {
       const isWildcard = apiKey.ipWhitelist.some((ip) => ip.trim() === '*');
       if (!isWildcard) {
-        const forwarded = req.headers['x-forwarded-for'];
-        const rawIp = typeof forwarded === 'string' ? forwarded.split(',')[0].trim() : (req.ip || req.socket.remoteAddress || '');
+        const rawIp = req.ip || req.socket?.remoteAddress || '';
         const cleanClientIp = rawIp.replace(/^::ffff:/, '');
 
         const isAllowed = apiKey.ipWhitelist.some((allowedIp) => {

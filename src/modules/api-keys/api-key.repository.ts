@@ -25,13 +25,15 @@ export class ApiKeyRepository {
     });
   }
 
-  async findByUserId(userId: string): Promise<ApiKey[]> {
+  async findByUserId(userId: string, limit = 50, skip = 0): Promise<ApiKey[]> {
     return prisma.apiKey.findMany({
       where: {
         userId,
         deletedAt: null,
       },
       orderBy: { createdAt: 'desc' },
+      take: limit,
+      skip,
     });
   }
 

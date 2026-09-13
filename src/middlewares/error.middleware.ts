@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { ZodError } from 'zod';
 import { AppError } from '../common/errors/app-error';
 import { ERROR_CODE } from '../common/errors/error-code';
 
@@ -21,6 +22,19 @@ export function errorMiddleware(
       success: false,
       message: error.message,
       code: error.code,
+    });
+    return;
+  }
+
+  if (error instanceof ZodError) {
+    res.status(422).json({
+      success: false,
+      message: 'Validation failed',
+      code: ERROR_CODE.VALIDATION_ERROR,
+      errors: error.errors.map((e) => ({
+        field: e.path.join('.'),
+        message: e.message,
+      })),
     });
     return;
   }

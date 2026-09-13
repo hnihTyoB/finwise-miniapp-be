@@ -20,7 +20,9 @@ export async function authMiddleware(
     }
   }
 
-  if (!token && typeof req.query?.token === 'string') {
+  // Allow query token ONLY for EventSource / SSE connection endpoints
+  const isSseRequest = req.path.endsWith('/stream') || req.headers.accept?.includes('text/event-stream');
+  if (!token && isSseRequest && typeof req.query?.token === 'string') {
     token = req.query.token;
   }
 

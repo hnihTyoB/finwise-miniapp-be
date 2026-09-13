@@ -7,6 +7,7 @@ import { BudgetService } from '../budgets/budget.service';
 import { SubscriptionService } from '../subscriptions/subscription.service';
 
 import { lockService } from '../../common/services/lock.service';
+import { prisma } from '../../database/prisma.client';
 
 export class NotificationWorker {
   private readonly reminderService = new ReminderService();
@@ -19,6 +20,7 @@ export class NotificationWorker {
   private running = false;
   private lastFinancialScanAt = 0;
   private lastSubscriptionScanAt = 0;
+  private lastTokenCleanupAt = 0;
 
   start() {
     if (!envConfig.notifications.workerEnabled || this.timer) {
@@ -109,6 +111,20 @@ export class NotificationWorker {
           }
         } catch (error) {
           console.error('Notification worker failed to scan subscriptions', error);
+        }
+      }
+
+      // Clean up expired tokens once every 24 hours (86_400_000 ms)
+      if (now.getTime() - this.lastTokenCleanupAt >= 24 * 60 * 60 * 1000) {
+        try {
+          await Promise.all([
+            prisma.verificationToken.deleteMany({ where: { expiresAt: { lt: now } } }),
+            prisma.passwordResetToken.deleteMany({ where: { expiresAt: { lt: now } } }),
+            prisma.refreshToken.deleteMany({ where: { expiresAt: { lt: now } } }),
+          ]);
+          this.lastTokenCleanupAt = now.getTime();
+        } catch (error) {
+          console.error('Notification worker failed to clean up expired tokens', error);
         }
       }
     } finally {

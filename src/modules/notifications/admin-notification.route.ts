@@ -6,6 +6,7 @@ import { validate } from '../../middlewares/validate.middleware';
 import { adminNotificationController } from './admin-notification.controller';
 import {
   adminDeliveryQuerySchema,
+  adminParamIdSchema,
   adminTemplateQuerySchema,
   notificationOverviewQuerySchema,
   updateChannelConfigSchema,
@@ -33,6 +34,7 @@ adminNotificationsRouter.get(
 adminNotificationsRouter.post(
   '/deliveries/:id/retry',
   requirePermission(PERMISSIONS.NOTIFICATION_RETRY),
+  validate(adminParamIdSchema, 'params'),
   adminNotificationController.retryDelivery,
 );
 
@@ -46,6 +48,7 @@ adminNotificationsRouter.get(
 adminNotificationsRouter.put(
   '/templates/:id',
   requirePermission(PERMISSIONS.NOTIFICATION_TEMPLATE_UPDATE),
+  validate(adminParamIdSchema, 'params'),
   validate(updateTemplateSchema),
   adminNotificationController.updateTemplate,
 );

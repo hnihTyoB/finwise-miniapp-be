@@ -5,6 +5,7 @@ import { requirePermission } from '../../middlewares/permission.middleware';
 import { validate } from '../../middlewares/validate.middleware';
 import { systemSettingController } from './system-setting.controller';
 import {
+  systemSettingKeyParamSchema,
   systemSettingQuerySchema,
   updateMaintenanceModeSchema,
   updateSystemSettingSchema,
@@ -31,12 +32,14 @@ adminSettingsRouter.post(
 adminSettingsRouter.get(
   '/:key',
   requirePermission(PERMISSIONS.SYSTEM_CONFIG_READ),
+  validate(systemSettingKeyParamSchema, 'params'),
   systemSettingController.findByKey,
 );
 
 adminSettingsRouter.patch(
   '/:key',
   requirePermission(PERMISSIONS.SYSTEM_CONFIG_UPDATE),
+  validate(systemSettingKeyParamSchema, 'params'),
   validate(updateSystemSettingSchema),
   systemSettingController.updateSetting,
 );

@@ -28,7 +28,8 @@ export class AnomalyService {
     input: EvaluateAnomalyInputDto,
   ): Promise<AnomalyEvaluationResultDto> {
     await this.ensureAnomaliesEnabled();
-    const amountNum = parseFloat(input.amount);
+    const parsedAmount = parseFloat(input.amount);
+    const amountNum = Number.isFinite(parsedAmount) ? Math.max(0, parsedAmount) : 0;
 
     const dateObj = input.occurredAt ?? new Date();
 
@@ -78,7 +79,8 @@ export class AnomalyService {
     const flagged: FlaggedAnomalyTransactionDto[] = [];
 
     for (const tx of transactions) {
-      const amountNum = parseFloat(tx.amount);
+      const parsedAmount = parseFloat(tx.amount);
+      const amountNum = Number.isFinite(parsedAmount) ? Math.max(0, parsedAmount) : 0;
       const dateObj = tx.createdAt ? new Date(tx.createdAt) : new Date();
       const hourOfDayVietnam = (dateObj.getUTCHours() + 7) % 24;
 

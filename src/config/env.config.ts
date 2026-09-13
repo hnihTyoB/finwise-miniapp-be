@@ -1,3 +1,20 @@
+const isProduction = (process.env.NODE_ENV || 'development') === 'production';
+
+if (isProduction) {
+  const accessSecret = process.env.JWT_ACCESS_SECRET;
+  const refreshSecret = process.env.JWT_REFRESH_SECRET;
+  if (!accessSecret || accessSecret.includes('default') || accessSecret.length < 32) {
+    throw new Error(
+      'FATAL: JWT_ACCESS_SECRET must be configured with at least 32 characters and cannot use default values in production.',
+    );
+  }
+  if (!refreshSecret || refreshSecret.includes('default') || refreshSecret.length < 32) {
+    throw new Error(
+      'FATAL: JWT_REFRESH_SECRET must be configured with at least 32 characters and cannot use default values in production.',
+    );
+  }
+}
+
 export const envConfig = {
   nodeEnv: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '8888', 10),

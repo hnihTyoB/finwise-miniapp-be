@@ -26,3 +26,7 @@ export const updateMaintenanceModeSchema = z.object({
   startAt: z.string().trim().nullable().optional(),
   endAt: z.string().trim().nullable().optional(),
 });
+
+export const systemSettingKeyParamSchema = z.object({
+  key: z.string().trim().min(1, 'Key is required').max(100, 'Key is too long'),
+});

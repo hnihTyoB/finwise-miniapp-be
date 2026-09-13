@@ -40,10 +40,6 @@ export class BudgetService {
   private readonly notificationService = new NotificationService();
 
   async findAll(userId: string, query: BudgetQueryDto) {
-    // JIT: check if any due recurring budgets for this user need catch-up
-    const today = instantToBusinessDate(new Date());
-    await this.catchUpDueBudgetsForUser(userId, today);
-
     const result = await this.repository.findAll(userId, query);
     const summaries = await this.repository.getBatchSpendingSummaries(
       userId,

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { PERMISSIONS } from '../../common/constants';
-import { authMiddleware } from '../../middlewares/auth.middleware';
+import { authOrApiKeyMiddleware } from '../../middlewares/api-key.middleware';
+import { apiKeyRateLimitMiddleware } from '../../middlewares/api-key-rate-limit.middleware';
 import { requirePermission } from '../../middlewares/permission.middleware';
 import { validate } from '../../middlewares/validate.middleware';
 import { SavingGoalController } from './saving-goal.controller';
@@ -18,7 +19,8 @@ import {
 const router = Router();
 const controller = new SavingGoalController();
 
-router.use(authMiddleware);
+router.use(authOrApiKeyMiddleware);
+router.use(apiKeyRateLimitMiddleware);
 
 router.get('/', requirePermission(PERMISSIONS.SAVING_GOAL_READ), validate(findSavingGoalsSchema, 'query'), controller.findAll);
 router.post('/', requirePermission(PERMISSIONS.SAVING_GOAL_CREATE), validate(createSavingGoalSchema), controller.create);

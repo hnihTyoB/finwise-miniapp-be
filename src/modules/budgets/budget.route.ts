@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { PERMISSIONS } from '../../common/constants';
-import { authMiddleware } from '../../middlewares/auth.middleware';
+import { authOrApiKeyMiddleware } from '../../middlewares/api-key.middleware';
+import { apiKeyRateLimitMiddleware } from '../../middlewares/api-key-rate-limit.middleware';
 import { requirePermission } from '../../middlewares/permission.middleware';
 import { validate } from '../../middlewares/validate.middleware';
 import { BudgetController } from './budget.controller';
@@ -15,7 +16,8 @@ import {
 const router = Router();
 const controller = new BudgetController();
 
-router.use(authMiddleware);
+router.use(authOrApiKeyMiddleware);
+router.use(apiKeyRateLimitMiddleware);
 
 router.get('/', requirePermission(PERMISSIONS.BUDGET_READ), validate(findBudgetsSchema, 'query'), controller.findAll);
 router.post('/', requirePermission(PERMISSIONS.BUDGET_CREATE), validate(createBudgetSchema), controller.create);

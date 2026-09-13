@@ -8,6 +8,7 @@ const config: Config = {
   transform: {
     '^.+\\.tsx?$': 'ts-jest',
   },
+  setupFiles: ['<rootDir>/tests/setup.ts'],
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   verbose: true,
   forceExit: true,

@@ -205,9 +205,15 @@ export class NotificationStreamService {
   }
 
   private writeEvent(res: Response, event: string, data: any): void {
-    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-    if (typeof (res as any).flush === 'function') {
-      (res as any).flush();
+    try {
+      if (!res.writableEnded && !res.destroyed) {
+        res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+        if (typeof (res as any).flush === 'function') {
+          (res as any).flush();
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`Failed to write SSE event '${event}':`, err);
     }
   }
 

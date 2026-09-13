@@ -296,7 +296,7 @@ export class QueryCompiler {
       }));
     }
 
-    // Generate Natural Language Summary
+    // Generate Natural Language Summary with Multi-Currency Awareness
     const typeLabel =
       ast.transactionType === 'INCOME'
         ? 'thu nhập'
@@ -308,20 +308,47 @@ export class QueryCompiler {
         ? `ví ${ast.walletNames.join(', ')}`
         : '';
 
-    let resolvedCurrency = 'VND';
-    if (ast.walletIds && ast.walletIds.length === 1) {
-      const queriedWallet = await prisma.wallet.findUnique({
-        where: { id: ast.walletIds[0] },
-        select: { currency: true },
-      });
-      if (queriedWallet?.currency) {
-        resolvedCurrency = queriedWallet.currency;
-      }
+    // Group by wallet to resolve distinct currencies
+    const walletAggregations = await prisma.transaction.groupBy({
+      by: ['walletId'],
+      where,
+      _sum: { amount: true },
+      _count: { id: true },
+    });
+
+    const queriedWallets = await prisma.wallet.findMany({
+      where: { id: { in: walletAggregations.map((w) => w.walletId) } },
+      select: { id: true, name: true, currency: true },
+    });
+    const walletMetaMap = new Map(queriedWallets.map((w) => [w.id, w]));
+
+    const currencyTotals = new Map<string, { sum: number; count: number }>();
+    for (const item of walletAggregations) {
+      const wallet = walletMetaMap.get(item.walletId);
+      const cur = wallet?.currency || 'VND';
+      const existing = currencyTotals.get(cur) || { sum: 0, count: 0 };
+      existing.sum += item._sum.amount ? item._sum.amount.toNumber() : 0;
+      existing.count += item._count.id;
+      currencyTotals.set(cur, existing);
     }
 
-    const summary = count === 0
-      ? `Không tìm thấy giao dịch ${typeLabel} nào ${entityLabel ? `thuộc ${entityLabel} ` : ''}trong khoảng thời gian ${timeRangeDesc}.`
-      : `Tổng ${typeLabel} ${entityLabel ? `thuộc ${entityLabel} ` : ''}trong ${timeRangeDesc} là ${totalVal.toLocaleString('vi-VN')} ${resolvedCurrency} qua ${count} giao dịch (bình quân: ${Math.round(avgVal).toLocaleString('vi-VN')} ${resolvedCurrency}/giao dịch).`;
+    let resolvedCurrency = 'VND';
+    let summary: string;
+
+    if (count === 0) {
+      summary = `Không tìm thấy giao dịch ${typeLabel} nào ${entityLabel ? `thuộc ${entityLabel} ` : ''}trong khoảng thời gian ${timeRangeDesc}.`;
+    } else if (currencyTotals.size > 1) {
+      resolvedCurrency = 'MULTI';
+      const currencyBreakdown = Array.from(currencyTotals.entries())
+        .map(([cur, data]) => `${data.sum.toLocaleString('vi-VN')} ${cur} (${data.count} giao dịch)`)
+        .join(' và ');
+      summary = `Tổng ${typeLabel} ${entityLabel ? `thuộc ${entityLabel} ` : ''}trong ${timeRangeDesc} là: ${currencyBreakdown} (tổng cộng ${count} giao dịch).`;
+    } else {
+      if (currencyTotals.size === 1) {
+        resolvedCurrency = Array.from(currencyTotals.keys())[0];
+      }
+      summary = `Tổng ${typeLabel} ${entityLabel ? `thuộc ${entityLabel} ` : ''}trong ${timeRangeDesc} là ${totalVal.toLocaleString('vi-VN')} ${resolvedCurrency} qua ${count} giao dịch (bình quân: ${Math.round(avgVal).toLocaleString('vi-VN')} ${resolvedCurrency}/giao dịch).`;
+    }
 
     return {
       summary,

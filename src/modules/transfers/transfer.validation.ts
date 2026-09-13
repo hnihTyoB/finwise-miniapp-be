@@ -15,8 +15,17 @@ const amountSchema = z
 
 const dateSchema = z
   .string()
-  .datetime({ offset: true, message: 'Date must be a valid ISO 8601 date-time' })
-  .transform((value) => new Date(value));
+  .trim()
+  .refine(
+    (value) => /^\d{4}-\d{2}-\d{2}$/.test(value) || !isNaN(Date.parse(value)),
+    'Date must be a valid YYYY-MM-DD format or ISO 8601 date-time',
+  )
+  .transform((value) => {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      return new Date(`${value}T00:00:00+07:00`);
+    }
+    return new Date(value);
+  });
 
 export const transferParamsSchema = z.object({
   id: z.string().uuid('Invalid transfer id'),

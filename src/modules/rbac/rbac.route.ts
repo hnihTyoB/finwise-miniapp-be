@@ -15,7 +15,6 @@ import {
   auditLogQuerySchema,
 } from './rbac.validation';
 
-const router = Router();
 const controller = new RbacController();
 
 // ==========================================
@@ -123,5 +122,3 @@ auditLogsRouter.get(
   validate(auditLogQuerySchema, 'query'),
   controller.findAllAuditLogs
 );
-
-export default router;

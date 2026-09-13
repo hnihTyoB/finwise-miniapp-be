@@ -60,12 +60,19 @@ describe('Zalo Auth Integration Tests', () => {
 
   describe('Invalid Zalo Token', () => {
     it('should return 401 when Zalo access token is invalid', async () => {
+      const mockFetchZalo = jest.spyOn(AuthService.prototype as any, 'fetchZaloProfile').mockResolvedValue({
+        error: -108,
+        message: 'Invalid access token',
+      });
+
       const res = await request(app)
         .post('/api/v1/auth/zalo-login')
         .send({
           accessToken: 'invalid_dummy_token',
           phoneNumber: testPhone,
         });
+
+      mockFetchZalo.mockRestore();
 
       expect(res.status).toBe(401);
       expect(res.body.success).toBe(false);

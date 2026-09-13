@@ -21,13 +21,15 @@ export class WebhookRepository {
     });
   }
 
-  async findByUserId(userId: string): Promise<WebhookEndpoint[]> {
+  async findByUserId(userId: string, limit = 50, skip = 0): Promise<WebhookEndpoint[]> {
     return prisma.webhookEndpoint.findMany({
       where: {
         userId,
         deletedAt: null,
       },
       orderBy: { createdAt: 'desc' },
+      take: limit,
+      skip,
     });
   }
 
@@ -96,11 +98,12 @@ export class WebhookRepository {
     });
   }
 
-  async findDeliveriesByEndpointId(endpointId: string, limit = 50): Promise<WebhookDelivery[]> {
+  async findDeliveriesByEndpointId(endpointId: string, limit = 50, skip = 0): Promise<WebhookDelivery[]> {
     return prisma.webhookDelivery.findMany({
       where: { webhookEndpointId: endpointId },
       orderBy: { createdAt: 'desc' },
       take: limit,
+      skip,
     });
   }
 

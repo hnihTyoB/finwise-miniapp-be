@@ -18,7 +18,7 @@ export class AuthController {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict',
-        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        maxAge: 30 * 60 * 1000, // 30 minutes (matches JWT_ACCESS_EXPIRES_IN)
       });
 
       res.cookie('refreshToken', result.refreshToken, {
@@ -69,7 +69,7 @@ export class AuthController {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict',
-        maxAge: 24 * 60 * 60 * 1000,
+        maxAge: 30 * 60 * 1000, // 30 minutes
       });
 
       res.cookie('refreshToken', result.refreshToken, {
@@ -301,7 +301,7 @@ export class AuthController {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict',
-        maxAge: 24 * 60 * 60 * 1000,
+        maxAge: 30 * 60 * 1000, // 30 minutes
       });
 
       res.cookie('refreshToken', result.refreshToken, {

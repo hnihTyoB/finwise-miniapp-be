@@ -28,11 +28,12 @@ export class JobRepository {
     });
   }
 
-  async findByUserId(userId: string, limit = 20): Promise<AsyncJob[]> {
+  async findByUserId(userId: string, limit = 20, skip = 0): Promise<AsyncJob[]> {
     return prisma.asyncJob.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
       take: limit,
+      skip,
     });
   }
 

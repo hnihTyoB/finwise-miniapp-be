@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { PERMISSIONS } from '../../common/constants';
-import { authMiddleware } from '../../middlewares/auth.middleware';
+import { authOrApiKeyMiddleware } from '../../middlewares/api-key.middleware';
+import { apiKeyRateLimitMiddleware } from '../../middlewares/api-key-rate-limit.middleware';
 import { requirePermission } from '../../middlewares/permission.middleware';
 import { validate } from '../../middlewares/validate.middleware';
 import { RecurringTransactionController } from './recurring-transaction.controller';
@@ -16,7 +17,8 @@ import {
 const router = Router();
 const controller = new RecurringTransactionController();
 
-router.use(authMiddleware);
+router.use(authOrApiKeyMiddleware);
+router.use(apiKeyRateLimitMiddleware);
 router.get('/', requirePermission(PERMISSIONS.RECURRING_TRANSACTION_READ), validate(findRecurringTransactionsSchema, 'query'), controller.findAll);
 router.post('/', requirePermission(PERMISSIONS.RECURRING_TRANSACTION_CREATE), validate(createRecurringTransactionSchema), controller.create);
 router.get('/:id/preview', requirePermission(PERMISSIONS.RECURRING_TRANSACTION_READ), validate(recurringTransactionParamsSchema, 'params'), validate(recurringTransactionPreviewSchema, 'query'), controller.preview);

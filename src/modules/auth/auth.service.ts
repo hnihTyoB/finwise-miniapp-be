@@ -476,6 +476,8 @@ export class AuthService {
       hasPhoneNumber: Boolean(dto.phoneNumber),
     });
 
+    let isPhoneVerified = false;
+
     try {
       const zaloProfile = await this.fetchZaloProfile(accessToken, appsecretProof);
       console.log('[ZaloAuth] fetchZaloProfile response:', zaloProfile);
@@ -485,7 +487,7 @@ export class AuthService {
         if (zaloProfile.picture?.data?.url) zaloAvatarUrl = zaloProfile.picture.data.url;
       } else if (zaloProfile?.error === -501) {
         console.warn('[ZaloAuth] Server IP is outside Vietnam (-501). Using client profile info.');
-      } else if (zaloProfile && zaloProfile.error !== undefined && zaloProfile.error !== 0 && !dto.phoneToken) {
+      } else if (zaloProfile && zaloProfile.error !== undefined && zaloProfile.error !== 0) {
         console.error('[ZaloAuth] fetchZaloProfile failed:', zaloProfile);
         throw new AppError(
           zaloProfile?.message ? `Zalo Profile Error: ${zaloProfile.message}` : 'Invalid Zalo access token',
@@ -507,6 +509,7 @@ export class AuthService {
         console.log('[ZaloAuth] fetchZaloPhoneNumber response:', phoneResponse);
         if (phoneResponse && phoneResponse.data?.number) {
           resolvedPhone = phoneResponse.data.number;
+          isPhoneVerified = true;
         } else if (phoneResponse?.error === -501) {
           console.warn('[ZaloAuth] Zalo Phone API limited by IP location (-501). Authenticating via Zalo ID.');
         } else if (phoneResponse && phoneResponse.error !== undefined && phoneResponse.error !== 0) {
@@ -524,7 +527,7 @@ export class AuthService {
 
     // Đảm bảo luôn có Zalo ID làm mã định danh tài khoản
     if (!zaloId) {
-      if (resolvedPhone) {
+      if (resolvedPhone && isPhoneVerified) {
         zaloId = `zalo_${resolvedPhone}`;
       } else if (dto.phoneToken) {
         const tokenHash = crypto.createHash('sha256').update(dto.phoneToken).digest('hex').substring(0, 16);
@@ -539,11 +542,22 @@ export class AuthService {
     // A. Tìm theo liên kết mạng xã hội Zalo ID trước
     let user: any = await this.repository.findBySocial('zalo', zaloId);
 
-    // B. Nếu chưa tìm thấy theo Zalo ID và có SĐT, tìm theo SĐT
+    // B. Nếu chưa tìm thấy theo Zalo ID và có SĐT
     if (!user && resolvedPhone) {
-      user = await this.repository.findByPhone(resolvedPhone);
-      if (user) {
-        await this.repository.linkSocialAccount(user.id, 'zalo', zaloId);
+      const existingUser = await this.repository.findByPhone(resolvedPhone);
+      if (existingUser) {
+        // CHỈ cho phép liên kết tài khoản khi số điện thoại đã được xác thực từ máy chủ Zalo
+        if (isPhoneVerified) {
+          user = existingUser;
+          await this.repository.linkSocialAccount(user.id, 'zalo', zaloId);
+        } else {
+          // Ngăn chặn Account Takeover nếu số điện thoại chưa được xác thực
+          throw new AppError(
+            'Số điện thoại đã được đăng ký. Vui lòng đăng nhập bằng mật khẩu hoặc xác thực qua Zalo phone token.',
+            409,
+            ERROR_CODE.DUPLICATE_ENTRY,
+          );
+        }
       }
     }
 
@@ -683,6 +697,9 @@ export class AuthService {
           }
         });
       });
+      req.setTimeout(5000, () => {
+        req.destroy(new Error('Zalo API request timeout'));
+      });
       req.on('error', reject);
       req.end();
     });
@@ -725,6 +742,9 @@ export class AuthService {
             reject(new Error('Failed to parse Zalo Phone API response'));
           }
         });
+      });
+      req.setTimeout(5000, () => {
+        req.destroy(new Error('Zalo Phone API request timeout'));
       });
       req.on('error', reject);
       req.end();

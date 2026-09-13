@@ -111,7 +111,8 @@ describe('apiKeyMiddleware', () => {
 
   it('should allow request when client IP is in ipWhitelist', async () => {
     const { rawKey, keyHash, keyPrefix } = generateApiKey();
-    req.headers = { 'x-api-key': rawKey, 'x-forwarded-for': '203.113.130.1' };
+    req.headers = { 'x-api-key': rawKey };
+    (req as any).ip = '203.113.130.1';
 
     const mockApiKey = {
       id: 'key-123',
@@ -143,7 +144,8 @@ describe('apiKeyMiddleware', () => {
 
   it('should reject with FORBIDDEN when client IP is not in ipWhitelist', async () => {
     const { rawKey, keyHash, keyPrefix } = generateApiKey();
-    req.headers = { 'x-api-key': rawKey, 'x-forwarded-for': '1.2.3.4' };
+    req.headers = { 'x-api-key': rawKey };
+    (req as any).ip = '1.2.3.4';
 
     const mockApiKey = {
       id: 'key-123',

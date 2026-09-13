@@ -228,7 +228,6 @@ model Wallet {
   recurringTransactionSchedules RecurringTransactionSchedule[]
 
   @@unique([userId, name])
-  @@index([userId])
   @@index([userId, isArchived])
   @@map("wallets")
 }
@@ -279,12 +278,12 @@ model Transaction {
   category            Category                        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   recurringOccurrence RecurringTransactionOccurrence?
 
-  @@index([userId])
   @@index([walletId])
   @@index([categoryId])
   @@index([date])
   @@index([userId, date])
   @@index([userId, type])
+  @@index([userId, type, date])
   @@index([walletId, date])
   @@index([categoryId, date])
   @@index([userId, type, createdAt])
@@ -358,7 +357,6 @@ model Budget {
   @@index([userId, type, period])
   @@index([isArchived, startDate, endDate])
   @@index([userId, isRecurring, autoRenew])
-  @@index([recurrenceGroupId, startDate])
   @@unique([recurrenceGroupId, startDate])
   @@map("budgets")
 }
@@ -415,7 +413,6 @@ model RefreshToken {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
   @@index([userId, expiresAt])
   @@index([expiresAt])
   @@map("refresh_tokens")
@@ -444,7 +441,6 @@ model VerificationToken {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
   @@index([userId, expiresAt])
   @@index([expiresAt])
   @@map("verification_tokens")
@@ -459,7 +455,6 @@ model PasswordResetToken {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
   @@index([userId, expiresAt])
   @@index([expiresAt])
   @@map("password_reset_tokens")
@@ -721,7 +716,6 @@ model ApiKey {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status, deletedAt])
-  @@index([keyHash])
   @@map("api_keys")
 }
 
@@ -804,6 +798,7 @@ model AsyncJob {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status, createdAt])
+  @@index([userId, createdAt(sort: Desc)])
   @@index([status, createdAt])
   @@map("async_jobs")
 }
