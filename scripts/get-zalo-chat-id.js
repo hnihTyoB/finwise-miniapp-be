@@ -34,10 +34,9 @@ async function main() {
   console.log(`   - Bot ID số:       ${botInfo.id}`);
   console.log('=============================================================');
   console.log('\n👉 HƯỚNG DẪN:');
-  console.log(`1. Mở Zalo, tìm kiếm: "${botInfo.account_name}" hoặc "${botInfo.display_name}".`);
-  console.log('   (Lưu ý: Nhắn vào đúng chat của BOT, không nhắn vào OA "Zalo Bot Manager")');
-  console.log('2. Gửi một tin nhắn bất kỳ (ví dụ: "hi", "xin chào").');
-  console.log('\n⏳ Đang lắng nghe tin nhắn đến từ Zalo (nhấn Ctrl+C để dừng)...');
+  console.log(`1. Bạn đã mở đúng khung chat của "${botInfo.display_name}".`);
+  console.log('2. Hãy gửi lại 1 tin nhắn bất kỳ (ví dụ: "hi", "test").');
+  console.log('\n⏳ Đang liên tục lắng nghe tin nhắn đến từ Zalo (nhấn Ctrl+C để dừng)...');
 
   let running = true;
   process.on('SIGINT', () => {
@@ -48,15 +47,28 @@ async function main() {
 
   while (running) {
     try {
-      const data = await callBot('getUpdates', { timeout: 10 });
-      if (data && data.ok && Array.isArray(data.result) && data.result.length > 0) {
-        for (const item of data.result) {
-          const msg = item.message;
-          if (!msg) continue;
+      const data = await callBot('getUpdates', { timeout: 15 });
 
+      // Nếu có dữ liệu trả về
+      if (data && data.ok && data.result) {
+        let messages = [];
+        if (Array.isArray(data.result)) {
+          messages = data.result.map((r) => r.message || r).filter(Boolean);
+        } else if (data.result.message) {
+          messages = [data.result.message];
+        } else if (typeof data.result === 'object') {
+          messages = [data.result];
+        }
+
+        for (const msg of messages) {
           const senderName = msg.from?.display_name || 'Người dùng';
-          const chatId = msg.chat?.id || msg.from?.id;
-          const userText = msg.text || '(Tin nhắn media/không có text)';
+          const chatId = msg.chat?.id || msg.from?.id || msg.chat_id;
+          const userText = msg.text || '(Tin nhắn media/icon)';
+
+          if (!chatId) {
+            console.log('⚠️ Nhận update nhưng không tìm thấy chat_id:', JSON.stringify(data));
+            continue;
+          }
 
           console.log('\n🎉 =============================================================');
           console.log(`✅ ĐÃ BẮT ĐƯỢC TIN NHẮN TỪ: "${senderName}"`);
@@ -68,23 +80,25 @@ async function main() {
           console.log('   Cài đặt thông báo -> Bật Zalo -> Nhập Chat ID -> Lưu');
           console.log('=============================================================\n');
 
-          // Phản hồi lại qua Zalo
+          // Gửi phản hồi lại qua Zalo
           try {
             await callBot('sendMessage', {
               chat_id: chatId,
-              text: `Chào ${senderName}! 🎉\n\nFinWise Bot đã nhận diện thành công tài khoản của bạn.\n\n🔑 Chat ID của bạn là:\n${chatId}\n\nHãy dán Chat ID này vào Cài đặt thông báo FinWise nhé!`,
+              text: `Chào ${senderName}! 🎉\n\nFinWise Bot đã nhận diện thành công tài khoản của bạn.\n\n🔑 Chat ID của bạn là:\n${chatId}\n\nHãy copy Chat ID này dán vào FinWise Mini App để hoàn tất liên kết nhé!`,
             });
             console.log('✉️  Đã gửi tin nhắn phản hồi chứa Chat ID trực tiếp về Zalo cho bạn!');
           } catch (replyErr) {
             console.warn('⚠️ Gửi tin phản hồi lỗi:', replyErr.message);
           }
 
-          console.log('\n✅ Đã lấy Chat ID thành công! Bạn có thể tắt cửa sổ này (Ctrl+C).');
+          console.log('\n✅ Đã lấy Chat ID thành công! Bạn có thể dừng script (Ctrl+C).');
           process.exit(0);
         }
+      } else if (data && data.error_code && data.error_code !== 408) {
+        console.warn('⚠️ Phản hồi từ Zalo API:', data);
       }
     } catch (err) {
-      // Tiếp tục vòng lặp
+      // Tiếp tục lắng nghe
     }
   }
 }
