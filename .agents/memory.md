@@ -98,6 +98,13 @@ File này chỉ lưu sự thật và quyết định dài hạn giúp các phiê
 - Mọi route endpoint nghiệp vụ ở backend bắt buộc được bảo vệ bằng middleware `requirePermission(PERMISSIONS.*)`.
 - Các vai trò hệ thống mặc định/bất biến (Bootstrap & System protection) được định nghĩa tập trung qua `SYSTEM_ROLES` trong `src/common/constants/system-role.constant.ts` (ví dụ `SYSTEM_ROLES.USER` cho vai trò đăng ký mặc định, `SYSTEM_ROLES.ADMIN` cho vai trò quản trị bất biến), không dùng `SYSTEM_ROLES` để kiểm tra phân quyền.
 - Endpoint đăng nhập `POST /api/v1/auth/login` hỗ trợ linh hoạt cả email và số điện thoại thông qua trường `email` hoặc `account`, tự động chuẩn hóa định dạng số điện thoại Việt Nam và truy vấn role đi kèm.
+- Luồng Zalo Login (`POST /api/v1/auth/zalo-login`) bắt buộc số điện thoại phải được giải mã từ Zalo Server qua `phoneToken` hoặc Graph API (`isPhoneVerified = true`). Nghiêm cấm gán quyền hoặc liên kết tài khoản dựa trên số điện thoại client tự gửi chưa xác thực (trả về `409 Conflict PHONE_ALREADY_REGISTERED_UNVERIFIED` nếu trùng tài khoản). Các cuộc gọi HTTP ra Zalo Graph API bắt buộc giới hạn timeout tối đa 5 giây qua `AbortSignal.timeout(5000)`.
+- Cơ chế Fail-Fast bảo vệ Secret trên Production: Lúc khởi động (`envConfig`), nếu `NODE_ENV === 'production'`, hệ thống ném ngoại lệ dừng tiến trình ngay lập tức nếu `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, hoặc `API_KEY_SECRET` ngắn hơn 32 ký tự hoặc chứa từ khóa mặc định.
+- AI Natural Language Query (`QueryCompiler`) phân nhóm theo loại tiền tệ của ví (`currencyTotals`), gán `resolvedCurrency = 'MULTI'` và xuất chi tiết từng loại tiền nếu phát hiện giao dịch đa tiền tệ; cấm cộng gộp trực tiếp các loại tiền khác nhau thành một giá trị vô hướng duy nhất.
+- IP Whitelist của API Key (`apiKeyMiddleware`) sử dụng `req.ip || req.socket?.remoteAddress` qua cơ chế tin cậy proxy của Express (`trust proxy`); cấm đọc trực tiếp header `X-Forwarded-For` chưa qua xác thực từ client để chống IP Spoofing.
+- Tách tiến trình gia hạn ngân sách định kỳ (Budget Auto-Renew) hoàn toàn khỏi luồng đọc `GET /budgets` sang worker nền (`notification.worker.ts`) bảo vệ bởi distributed lock (`LockService`), triệt tiêu N+1 queries và transaction lock contention trên API đọc.
+- Rút token JWT qua query string (`?token=`) được giới hạn nghiêm ngặt duy nhất cho kết nối Server-Sent Events (`/api/v1/notifications/stream`). Toàn bộ các API HTTP khác bắt buộc truyền qua header `Authorization: Bearer <token>`.
+- Quét subscription định kỳ và tính toán ngày nghiệp vụ sử dụng thống nhất hàm `instantToBusinessDate()` (`Asia/Ho_Chi_Minh` UTC+7) từ `business-time.ts`.
 
 ## Trạng thái đã biết
 
