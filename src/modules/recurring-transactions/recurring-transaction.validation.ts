@@ -75,6 +75,7 @@ export const updateRecurringTransactionSchema = z
     anchorDate: scheduleFields.anchorDate.optional(),
     endDate: scheduleFields.endDate,
     missedRunPolicy: scheduleFields.missedRunPolicy.optional(),
+    remindDaysBefore: scheduleFields.remindDaysBefore,
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: 'At least one field is required',

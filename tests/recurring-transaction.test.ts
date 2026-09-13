@@ -175,6 +175,45 @@ describe('Upgrade 6: Automated Recurring Transactions', () => {
       expect(resume.body.data.isActive).toBe(true);
     });
 
+    it('updates recurring transaction reminder preferences and preserves them on fetch', async () => {
+      const updateRes = await request(app)
+        .patch(`/api/v1/recurring-transactions/${scheduleId}`)
+        .set('Authorization', authHeader)
+        .send({
+          remindDaysBefore: 3,
+        });
+      expect(updateRes.status).toBe(200);
+      expect(updateRes.body.data.remindDaysBefore).toBe(3);
+
+      const fetched = await request(app)
+        .get(`/api/v1/recurring-transactions/${scheduleId}`)
+        .set('Authorization', authHeader);
+      expect(fetched.status).toBe(200);
+      expect(fetched.body.data.remindDaysBefore).toBe(3);
+
+      const listRes = await request(app)
+        .get('/api/v1/recurring-transactions')
+        .set('Authorization', authHeader);
+      expect(listRes.status).toBe(200);
+      const item = listRes.body.data.find((s: any) => s.id === scheduleId);
+      expect(item?.remindDaysBefore).toBe(3);
+
+      const disableRes = await request(app)
+        .patch(`/api/v1/recurring-transactions/${scheduleId}`)
+        .set('Authorization', authHeader)
+        .send({
+          remindDaysBefore: null,
+        });
+      expect(disableRes.status).toBe(200);
+      expect(disableRes.body.data.remindDaysBefore).toBeNull();
+
+      const fetchedDisabled = await request(app)
+        .get(`/api/v1/recurring-transactions/${scheduleId}`)
+        .set('Authorization', authHeader);
+      expect(fetchedDisabled.status).toBe(200);
+      expect(fetchedDisabled.body.data.remindDaysBefore).toBeNull();
+    });
+
     it('rejects cross-user schedule access', async () => {
       const response = await request(app)
         .get(`/api/v1/recurring-transactions/${scheduleId}`)

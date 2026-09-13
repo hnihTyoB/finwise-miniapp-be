@@ -7,18 +7,13 @@ import { envConfig } from '../../config/env.config';
 export function formatZaloNotificationText(
   title: string,
   message: string,
-  actionUrl?: string | null,
+  _actionUrl?: string | null,
 ): string {
   const lines: string[] = [];
 
   lines.push(`🔔 **${title}**`);
   lines.push('');
   lines.push(message);
-
-  if (actionUrl) {
-    lines.push('');
-    lines.push(`> Xem chi tiết tại FinWise: ${actionUrl}`);
-  }
 
   return lines.join('\n');
 }

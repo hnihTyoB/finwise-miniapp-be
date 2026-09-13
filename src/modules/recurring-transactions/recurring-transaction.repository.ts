@@ -102,7 +102,6 @@ export class RecurringTransactionRepository {
         where: {
           userId,
           actionUrl: { startsWith: '/recurring-transactions?id=' },
-          isActive: true,
         },
         select: { actionUrl: true },
       }),
@@ -141,7 +140,6 @@ export class RecurringTransactionRepository {
         where: {
           userId,
           actionUrl: { startsWith: `/recurring-transactions?id=${id}` },
-          isActive: true,
         },
         select: { actionUrl: true },
       }),

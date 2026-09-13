@@ -103,7 +103,10 @@ export class RecurringTransactionService {
         await this.syncReminder(userId, created.id, created, data.remindDaysBefore, transaction);
       }
 
-      return created;
+      return {
+        ...created,
+        remindDaysBefore: data.remindDaysBefore ?? null,
+      };
     });
   }
 
@@ -171,9 +174,42 @@ export class RecurringTransactionService {
 
       if (data.remindDaysBefore !== undefined) {
         await this.syncReminder(userId, id, updated, data.remindDaysBefore, transaction);
+      } else if (timingChanged) {
+        const existingReminder = await transaction.reminder.findFirst({
+          where: {
+            userId,
+            actionUrl: { startsWith: `/recurring-transactions?id=${id}` },
+          },
+          select: { actionUrl: true },
+        });
+        if (existingReminder?.actionUrl) {
+          const match = existingReminder.actionUrl.match(/&remindDaysBefore=(\d+)/);
+          const days = match ? parseInt(match[1], 10) : 0;
+          await this.syncReminder(userId, id, updated, days, transaction);
+        }
       }
 
-      return updated;
+      let returnRemindDaysBefore: number | null = null;
+      if (data.remindDaysBefore !== undefined) {
+        returnRemindDaysBefore = data.remindDaysBefore ?? null;
+      } else {
+        const reminder = await transaction.reminder.findFirst({
+          where: {
+            userId,
+            actionUrl: { startsWith: `/recurring-transactions?id=${id}` },
+          },
+          select: { actionUrl: true },
+        });
+        if (reminder?.actionUrl) {
+          const match = reminder.actionUrl.match(/&remindDaysBefore=(\d+)/);
+          returnRemindDaysBefore = match ? parseInt(match[1], 10) : 0;
+        }
+      }
+
+      return {
+        ...updated,
+        remindDaysBefore: returnRemindDaysBefore,
+      };
     });
   }
 
