@@ -46,6 +46,7 @@ const notificationSelect = {
 
 const settingSelect = {
   channels: true,
+  zaloBotChatId: true,
   budgetAlertsEnabled: true,
   savingGoalAlertsEnabled: true,
   reminderAlertsEnabled: true,
@@ -418,7 +419,15 @@ export class NotificationRepository {
             title: true,
             message: true,
             actionUrl: true,
-            user: { select: { email: true, fullName: true } },
+            user: {
+              select: {
+                email: true,
+                fullName: true,
+                notificationSetting: {
+                  select: { zaloBotChatId: true },
+                },
+              },
+            },
           },
         },
       },

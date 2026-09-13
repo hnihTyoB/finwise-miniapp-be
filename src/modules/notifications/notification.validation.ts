@@ -37,6 +37,16 @@ export const updateNotificationSettingSchema = z
       .max(4)
       .transform((channels) => [...new Set(channels)])
       .optional(),
+    /**
+     * chat_id của Zalo Bot nhận được khi user nhắn tin cho bot.
+     * Truyền null để xóa liên kết Zalo Bot.
+     */
+    zaloBotChatId: z
+      .string()
+      .max(100, 'Zalo Bot Chat ID must not exceed 100 characters')
+      .trim()
+      .nullable()
+      .optional(),
     budgetAlertsEnabled: z.boolean().optional(),
     savingGoalAlertsEnabled: z.boolean().optional(),
     reminderAlertsEnabled: z.boolean().optional(),
@@ -45,3 +55,4 @@ export const updateNotificationSettingSchema = z
   .refine((data) => Object.keys(data).length > 0, {
     message: 'At least one field is required',
   });
+

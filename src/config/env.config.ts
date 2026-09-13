@@ -229,4 +229,12 @@ export const envConfig = {
       return Number.isFinite(val) && val >= 1000 && val <= 3600000 ? val : 60000;
     })(),
   },
+  zaloBot: {
+    token: process.env.ZALO_BOT_TOKEN || '',
+    apiBaseUrl: 'https://bot-api.zaloplatforms.com',
+    requestTimeoutMs: (() => {
+      const val = parseInt(process.env.ZALO_BOT_REQUEST_TIMEOUT_MS || '8000', 10);
+      return Number.isFinite(val) && val >= 1000 && val <= 30000 ? val : 8000;
+    })(),
+  },
 };

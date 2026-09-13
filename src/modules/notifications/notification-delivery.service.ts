@@ -6,10 +6,15 @@ import { MailService } from '../../common/services/mail.service';
 import { mailConfig } from '../../config/mail.config';
 import { envConfig } from '../../config/env.config';
 import { NotificationRepository } from './notification.repository';
+import {
+  formatZaloNotificationText,
+  ZaloBotService,
+} from '../../common/services/zalo-bot.service';
 
 export class NotificationDeliveryService {
   private readonly repository = new NotificationRepository();
   private readonly mailService = new MailService();
+  private readonly zaloBotService = new ZaloBotService();
 
   async processDue(now: Date): Promise<number> {
     const staleBefore = new Date(now.getTime() - 5 * 60 * 1000);
@@ -95,7 +100,20 @@ export class NotificationDeliveryService {
     }
 
     if (delivery.channel === NotificationChannel.ZALO) {
-      return 'Zalo provider is not configured';
+      if (!this.zaloBotService.isConfigured()) {
+        return 'Zalo Bot token is not configured';
+      }
+      const chatId = delivery.notification.user.notificationSetting?.zaloBotChatId;
+      if (!chatId) {
+        return 'User has not linked their Zalo account to receive Bot notifications';
+      }
+      const text = formatZaloNotificationText(
+        delivery.notification.title,
+        delivery.notification.message,
+        delivery.notification.actionUrl,
+      );
+      await this.zaloBotService.sendMessage(chatId, text);
+      return null;
     }
     if (delivery.channel === NotificationChannel.PUSH) {
       return 'Push provider is not configured';

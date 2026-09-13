@@ -528,6 +528,7 @@ model NotificationSetting {
   id                      String                @id @default(uuid()) @db.Uuid
   userId                  String                @unique @map("user_id") @db.Uuid
   channels                NotificationChannel[] @default([IN_APP])
+  zaloBotChatId           String?               @map("zalo_bot_chat_id") @db.VarChar(100)
   budgetAlertsEnabled     Boolean               @default(true) @map("budget_alerts_enabled")
   savingGoalAlertsEnabled Boolean               @default(true) @map("saving_goal_alerts_enabled")
   reminderAlertsEnabled   Boolean               @default(true) @map("reminder_alerts_enabled")

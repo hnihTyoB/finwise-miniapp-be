@@ -54,8 +54,10 @@ File này chỉ lưu sự thật và quyết định dài hạn giúp các phiê
   Saving Goal. Báo cáo dùng khoảng thời gian `[from, to)`, hỗ trợ preset ngày/tuần/tháng/năm
   hoặc custom tối đa 1830 ngày, bucket theo offset múi giờ và luôn tách số tiền theo currency.
 - Notification dùng inbox theo ownership và database-backed delivery outbox với khóa chống
-  trùng theo sự kiện. Kênh mặc định là `IN_APP`; email dùng SMTP hiện có, còn Zalo/push giữ
-  trạng thái delivery riêng để bổ sung provider adapter sau.
+  trùng theo sự kiện. Kênh mặc định là `IN_APP`; email dùng SMTP hiện có; kênh `ZALO` dùng
+  Zalo Bot API (Phase 1 — outbound-only, `sendMessage` qua `ZaloBotService`). `NotificationSetting`
+  lưu `zaloBotChatId` (VARCHAR 100) là chat_id Zalo Bot của user; user tự nhập qua UI sau khi
+  nhắn tin cho bot. Token bot đọc từ env `ZALO_BOT_TOKEN`. Push giữ trạng thái stub.
   Thông báo in-app và số lượng chưa đọc (`unread-count`) được phát thời gian thực tới client qua
   Server-Sent Events (`GET /api/v1/notifications/stream`), quản lý kết nối và phát sóng bởi
   `NotificationStreamService` (hỗ trợ Redis Pub/Sub đa instance và in-memory fallback).
