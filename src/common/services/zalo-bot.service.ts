@@ -52,25 +52,33 @@ export class ZaloBotService {
   async sendMessage(chatId: string, text: string): Promise<void> {
     const url = `${this.apiBase}/bot${this.token}/sendMessage`;
 
-    const response = await fetch(url, {
+    let response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        chat_id: chatId,
+        chat_id: String(chatId),
         text,
         parse_mode: 'markdown',
       }),
       signal: AbortSignal.timeout(this.timeoutMs),
     });
 
-    if (!response.ok) {
-      const body = await response.text().catch(() => '');
-      throw new Error(
-        `Zalo Bot API HTTP ${response.status}: ${body.slice(0, 200)}`,
-      );
+    let data = (await response.json().catch(() => ({}))) as { ok: boolean; description?: string };
+
+    // Nếu Zalo trả về lỗi do parse markdown không hợp lệ, thử gửi lại dưới dạng plain text
+    if (!data.ok) {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: String(chatId),
+          text,
+        }),
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+      data = (await response.json().catch(() => ({}))) as { ok: boolean; description?: string };
     }
 
-    const data = (await response.json()) as { ok: boolean; description?: string };
     if (!data.ok) {
       throw new Error(
         `Zalo Bot sendMessage failed: ${data.description ?? 'unknown error'}`,

@@ -11,20 +11,24 @@ export class ZaloBotWebhookService {
    * Xử lý bất đồng bộ, không làm chậm response HTTP trả về cho Zalo.
    */
   async processWebhook(payload: ZaloWebhookPayload): Promise<void> {
-    const result = payload.result;
-    if (!result) {
-      this.logger.debug('Received empty result in Zalo webhook payload');
-      return;
+    const raw = payload as any;
+    // Hỗ trợ cả 2 dạng: { ok: true, result: { event_name, message } } hoặc dạng phẳng { event_name, message }
+    const rawResult = raw.result || raw;
+    const eventName: string = rawResult.event_name || raw.event_name || 'message.text.received';
+    let message = rawResult.message || raw.message;
+
+    if (typeof message === 'string') {
+      try {
+        message = JSON.parse(message);
+      } catch {
+        message = { text: message };
+      }
     }
 
-    const eventName = result.event_name;
-    const message = result.message;
+    this.logger.info(`Received Zalo webhook event "${eventName}"`, raw);
 
-    this.logger.info(`Received Zalo webhook event "${eventName}"`);
-
-    // Chỉ xử lý các sự kiện tin nhắn text từ người dùng
-    if (eventName === 'message.text.received' && message) {
-      const messageId = message.message_id;
+    if (message) {
+      const messageId = message.message_id || message.id;
       if (messageId) {
         // Kiểm tra deduplication chống xử lý lặp
         const dedupKey = `zalo:dedup:${messageId}`;
@@ -36,9 +40,14 @@ export class ZaloBotWebhookService {
         await cacheService.set(dedupKey, true, 3600); // 1 giờ
       }
 
-      const chatId = message.chat.id;
-      const senderName = message.from.display_name || 'Người dùng';
-      const text = message.text || '';
+      const chatId = String(message.chat?.id || message.chat_id || message.from?.id || message.from_id || '');
+      const senderName = message.from?.display_name || message.from?.name || 'Người dùng';
+      const text = message.text || message.caption || '';
+
+      if (!chatId) {
+        this.logger.warn('Could not extract chatId from message payload', message);
+        return;
+      }
 
       try {
         await zaloBotCommandDispatcher.dispatch({

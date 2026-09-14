@@ -25,7 +25,8 @@ async function main() {
     console.error('❌ Lỗi xác thực token Bot:', me);
     process.exit(1);
   }
-
+  // Đảm bảo Webhook đã được xóa để Zalo chuyển sang chế độ Polling (getUpdates)
+  await callBot('deleteWebhook').catch(() => {});
   const botInfo = me.result;
   console.log('\n=============================================================');
   console.log('🤖 THÔNG TIN BOT FINWISE CỦA BẠN:');
