@@ -3,6 +3,7 @@ import { zaloBotWebhookService } from './services/zalo-bot-webhook.service';
 import { zaloBotLinkService } from './services/zalo-bot-link.service';
 import { AppError } from '../../common/errors/app-error';
 import { ERROR_CODE } from '../../common/errors/error-code';
+import { envConfig } from '../../config/env.config';
 
 export class ZaloBotController {
   /**
@@ -32,11 +33,13 @@ export class ZaloBotController {
       }
 
       const result = await zaloBotLinkService.generateLinkCode(userId);
+      const botId = envConfig.zaloBot.token.split(':')[0] || '2012016088824880961';
       res.json({
         success: true,
         data: {
           linkCode: result.linkCode,
           expiresInSeconds: result.expiresInSeconds,
+          botId,
           botUsername: 'bot.uGsxQaGt',
           botDisplayName: 'Bot Finwise',
           deepLinkUrl: 'https://zalo.me/bot.uGsxQaGt',
