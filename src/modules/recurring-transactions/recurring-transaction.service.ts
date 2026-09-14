@@ -607,7 +607,7 @@ export class RecurringTransactionService {
       [RecurringTransactionFrequency.YEARLY]: ReminderFrequency.YEARLY,
     };
 
-    const actionUrl = `/recurring-transactions?id=${scheduleId}&remindDaysBefore=${remindDaysBefore}`;
+    const actionUrl = `/recurring-transactions?id=${scheduleId}&remindDaysBefore=${remindDaysBefore}&dueDate=${nextRunBusinessDate}`;
     const desc = schedule.description ? ` (${schedule.description})` : '';
 
     await transaction.reminder.create({
@@ -615,7 +615,7 @@ export class RecurringTransactionService {
         userId,
         type: ReminderType.RECURRING_PAYMENT,
         title: `Nhắc thanh toán giao dịch định kỳ${desc}`,
-        message: `Giao dịch định kỳ${desc} sắp đến hạn thực hiện.`,
+        message: `Giao dịch định kỳ${desc} sắp đến hạn thực hiện vào ngày ${nextRunBusinessDate}.`,
         remindAt,
         frequency: frequencyMap[schedule.frequency] ?? ReminderFrequency.MONTHLY,
         repeatInterval: schedule.repeatInterval,

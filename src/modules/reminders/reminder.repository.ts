@@ -8,6 +8,11 @@ import {
 } from '@prisma/client';
 import { prisma } from '../../database/prisma.client';
 import {
+  addBusinessDays,
+  instantToBusinessDate,
+  prismaDateToBusinessDate,
+} from '../../common/date-time/business-time';
+import {
   PersistReminderDto,
   ReminderQueryDto,
 } from './reminder.dto';
@@ -143,6 +148,34 @@ export class ReminderRepository {
         }
 
         if (channels && channels.length > 0) {
+          const scheduleMatch = reminder.actionUrl?.match(/[?&]id=([^&]+)/);
+          const scheduleId = scheduleMatch ? scheduleMatch[1] : undefined;
+          const dueDateMatch = reminder.actionUrl?.match(/[?&]dueDate=([^&]+)/);
+          const remindDaysMatch = reminder.actionUrl?.match(/[?&]remindDaysBefore=(\d+)/);
+
+          let dueDate = dueDateMatch ? dueDateMatch[1] : undefined;
+          if (scheduleId) {
+            const schedule = await transaction.recurringTransactionSchedule.findUnique({
+              where: { id: scheduleId },
+              select: { nextRunAt: true, anchorDate: true },
+            });
+            if (schedule) {
+              const runDate = schedule.nextRunAt ?? schedule.anchorDate;
+              dueDate = prismaDateToBusinessDate(runDate);
+            }
+          } else if (!dueDate && remindDaysMatch) {
+            const days = parseInt(remindDaysMatch[1], 10);
+            const triggerDate = instantToBusinessDate(expectedTriggerAt);
+            dueDate = addBusinessDays(triggerDate, days);
+          }
+
+          let message = reminder.message ?? 'A scheduled reminder is due.';
+          if (dueDate && reminder.type === ReminderType.RECURRING_PAYMENT) {
+            if (!message.includes(dueDate)) {
+              message = message.replace(/\.?$/, ` vào ngày ${dueDate}.`);
+            }
+          }
+
           await transaction.notification.create({
             data: {
               userId: reminder.userId,
@@ -151,15 +184,18 @@ export class ReminderRepository {
                 ? NotificationPriority.HIGH
                 : NotificationPriority.NORMAL,
               title: reminder.title,
-              message: reminder.message ?? 'A scheduled reminder is due.',
+              message,
               channels,
               actionUrl: reminder.actionUrl,
               sourceType: NotificationSourceType.REMINDER,
               sourceId: reminder.id,
               dedupKey: `reminder:${reminder.id}:${expectedTriggerAt.toISOString()}`,
+              expiresAt: null,
               data: {
                 reminderId: reminder.id,
                 scheduledAt: expectedTriggerAt.toISOString(),
+                ...(scheduleId ? { scheduleId } : {}),
+                ...(dueDate ? { dueDate } : {}),
               },
               deliveries: externalChannels.length > 0
                 ? {
