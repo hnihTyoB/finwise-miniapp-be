@@ -31,11 +31,16 @@ async function main() {
     return;
   }
 
-  // Flag: Xem thông tin webhook hiện tại
-  if (args.includes('--info')) {
-    console.log('🔄 Đang lấy thông tin Webhook hiện tại...');
-    const result = await callBot('getWebhookInfo');
-    console.log('Thông tin Webhook:', JSON.stringify(result, null, 2));
+  // Flag: Xem / kiểm tra webhook hiện tại
+  if (args.includes('--info') || args.includes('--test')) {
+    console.log('🔄 Đang kiểm tra trạng thái Webhook qua Zalo Bot API (testWebhook)...');
+    const result = await callBot('testWebhook');
+    console.log('Kết quả:', JSON.stringify(result, null, 2));
+    if (result.ok) {
+      console.log('✅ Webhook đang hoạt động bình thường!');
+    } else {
+      console.log('⚠️ Chi tiết:', result.description || 'Chưa thiết lập Webhook');
+    }
     return;
   }
 
