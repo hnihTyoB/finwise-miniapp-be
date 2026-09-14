@@ -77,6 +77,61 @@ export class ZaloBotService {
       );
     }
   }
+
+  /**
+   * Lấy thông tin cơ bản về bot (account_name, display_name, id)
+   */
+  async getMe(): Promise<{ ok: boolean; result?: { id: string; account_name: string; display_name?: string } }> {
+    const url = `${this.apiBase}/bot${this.token}/getMe`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(this.timeoutMs),
+    });
+    return response.json() as Promise<{ ok: boolean; result?: { id: string; account_name: string; display_name?: string } }>;
+  }
+
+  /**
+   * Thiết lập Webhook URL với Zalo Bot Platform.
+   * @param url          - URL HTTPS nhận webhook
+   * @param secretToken  - Chuỗi bí mật gửi kèm trong header X-Bot-Api-Secret-Token
+   */
+  async setWebhook(url: string, secretToken: string): Promise<any> {
+    const endpoint = `${this.apiBase}/bot${this.token}/setWebhook`;
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, secret_token: secretToken }),
+      signal: AbortSignal.timeout(this.timeoutMs),
+    });
+    return response.json();
+  }
+
+  /**
+   * Xóa cấu hình Webhook URL.
+   */
+  async deleteWebhook(): Promise<any> {
+    const endpoint = `${this.apiBase}/bot${this.token}/deleteWebhook`;
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(this.timeoutMs),
+    });
+    return response.json();
+  }
+
+  /**
+   * Lấy thông tin cấu hình Webhook hiện tại.
+   */
+  async getWebhookInfo(): Promise<any> {
+    const endpoint = `${this.apiBase}/bot${this.token}/getWebhookInfo`;
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(this.timeoutMs),
+    });
+    return response.json();
+  }
 }
 
 /** Singleton dùng chung — khởi tạo một lần, token đọc từ env khi server start. */

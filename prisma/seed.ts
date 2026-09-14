@@ -979,6 +979,15 @@ async function seedDemoData(userId: string) {
       isPublic: false,
     },
     {
+      key: 'security.audit_log_retention_days',
+      value: '30',
+      type: SettingType.NUMBER,
+      category: SettingCategory.SECURITY,
+      description: 'Số ngày lưu trữ nhật ký kiểm toán trước khi tự động nén lưu trữ và dọn dẹp',
+      isEditable: true,
+      isPublic: false,
+    },
+    {
       key: 'system.maintenance.enabled',
       value: 'false',
       type: SettingType.BOOLEAN,

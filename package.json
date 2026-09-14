@@ -24,7 +24,10 @@
     "wrangler:dev": "wrangler dev",
     "wrangler:dev:remote": "wrangler dev --remote",
     "wrangler:deploy": "wrangler deploy",
-    "zalo:get-id": "node scripts/get-zalo-chat-id.js"
+    "zalo:get-id": "node scripts/get-zalo-chat-id.js",
+    "zalo:set-webhook": "node scripts/register-zalo-webhook.js",
+    "zalo:delete-webhook": "node scripts/register-zalo-webhook.js --delete",
+    "zalo:webhook-info": "node scripts/register-zalo-webhook.js --info"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1107.0",

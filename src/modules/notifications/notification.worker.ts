@@ -5,6 +5,7 @@ import { NotificationService } from './notification.service';
 import { RecurringTransactionService } from '../recurring-transactions/recurring-transaction.service';
 import { BudgetService } from '../budgets/budget.service';
 import { SubscriptionService } from '../subscriptions/subscription.service';
+import { auditLogArchiveService } from '../audit-logs/audit-log-archive.service';
 
 import { lockService } from '../../common/services/lock.service';
 import { prisma } from '../../database/prisma.client';
@@ -16,11 +17,13 @@ export class NotificationWorker {
   private readonly recurringTransactionService = new RecurringTransactionService();
   private readonly budgetService = new BudgetService();
   private readonly subscriptionService = new SubscriptionService();
+  private readonly auditLogArchiveService = auditLogArchiveService;
   private timer: NodeJS.Timeout | null = null;
   private running = false;
   private lastFinancialScanAt = 0;
   private lastSubscriptionScanAt = 0;
   private lastTokenCleanupAt = 0;
+  private lastAuditLogCleanupAt = 0;
 
   start() {
     if (!envConfig.notifications.workerEnabled || this.timer) {
@@ -125,6 +128,23 @@ export class NotificationWorker {
           this.lastTokenCleanupAt = now.getTime();
         } catch (error) {
           console.error('Notification worker failed to clean up expired tokens', error);
+        }
+      }
+
+      // Archive and clean up audit logs older than retention period (default 30 days)
+      if (now.getTime() - this.lastAuditLogCleanupAt >= envConfig.auditLogs.cleanupIntervalMs) {
+        try {
+          const result = await this.auditLogArchiveService.archiveAndCleanup({
+            triggerSource: 'CRON',
+          });
+          this.lastAuditLogCleanupAt = now.getTime();
+          if (result.archivedCount > 0) {
+            console.info(
+              `[NotificationWorker] Audit logs archive: ${result.archivedCount} logs archived to ${result.archiveFileName} and purged.`,
+            );
+          }
+        } catch (error) {
+          console.error('Notification worker failed to archive and clean up audit logs', error);
         }
       }
     } finally {

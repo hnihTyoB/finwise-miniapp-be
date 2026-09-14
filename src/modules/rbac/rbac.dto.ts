@@ -28,18 +28,7 @@ export interface PermissionQueryDto {
   search?: string;
 }
 
-export interface AuditLogQueryDto {
-  actorId?: string;
-  action?: string;
-  targetType?: string;
-  targetId?: string;
-  dateFrom?: string;
-  dateTo?: string;
-  page?: number;
-  limit?: number;
-  sortBy?: string;
-  order?: 'asc' | 'desc';
-}
+export { AuditLogQueryDto } from '../audit-logs/audit-log.dto';
 
 export interface UserRoleUpdateDto {
   roleId: string;

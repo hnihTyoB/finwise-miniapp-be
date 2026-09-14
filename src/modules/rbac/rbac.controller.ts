@@ -6,7 +6,6 @@ import {
   RoleQueryDto,
   AssignRolePermissionsDto,
   PermissionQueryDto,
-  AuditLogQueryDto,
   UserRoleUpdateDto,
 } from './rbac.dto';
 
@@ -152,20 +151,6 @@ export class RbacController {
       };
       const result = await this.service.updateUserRole(targetUserId, roleId, actorId, metadata);
       res.json({ success: true, data: result });
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  // ==========================================
-  // AUDIT LOGS
-  // ==========================================
-
-  findAllAuditLogs = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const query = req.query as unknown as AuditLogQueryDto;
-      const result = await this.service.findAllAuditLogs(query);
-      res.json({ success: true, ...result });
     } catch (error) {
       next(error);
     }

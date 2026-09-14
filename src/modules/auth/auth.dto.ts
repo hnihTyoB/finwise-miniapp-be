@@ -13,6 +13,13 @@ export interface ZaloLoginDto {
   avatar?: string;       // Avatar từ getUserInfo SDK client
 }
 
+export interface ZaloLinkDto {
+  accessToken: string;   // Zalo access_token từ getAccessToken() SDK
+  zaloId?: string;       // User ID từ getUserInfo SDK client (fallback khi graph.zalo.me giới hạn IP)
+  name?: string;         // Tên user từ getUserInfo SDK client
+  avatar?: string;       // Avatar từ getUserInfo SDK client
+}
+
 export interface ZaloPhoneResponse {
   data?: {
     number?: string;
@@ -62,6 +69,7 @@ export interface MeDto {
   };
   permissions: string[];
   isActive: boolean;
+  zaloLinked: boolean;   // true nếu user đã liên kết Zalo
   createdAt: Date;
   updatedAt: Date;
 }

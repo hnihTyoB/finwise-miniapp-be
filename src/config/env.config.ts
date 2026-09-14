@@ -232,9 +232,26 @@ export const envConfig = {
   zaloBot: {
     token: process.env.ZALO_BOT_TOKEN || '',
     apiBaseUrl: 'https://bot-api.zaloplatforms.com',
+    secretToken: process.env.ZALO_BOT_SECRET_TOKEN || '',
+    webhookUrl: process.env.ZALO_BOT_WEBHOOK_URL || '',
+    linkCodeTtlSeconds: (() => {
+      const val = parseInt(process.env.ZALO_BOT_LINK_CODE_TTL_SECONDS || '600', 10);
+      return Number.isFinite(val) && val >= 60 && val <= 3600 ? val : 600;
+    })(),
     requestTimeoutMs: (() => {
       const val = parseInt(process.env.ZALO_BOT_REQUEST_TIMEOUT_MS || '8000', 10);
       return Number.isFinite(val) && val >= 1000 && val <= 30000 ? val : 8000;
+    })(),
+  },
+  auditLogs: {
+    retentionDays: (() => {
+      const val = parseInt(process.env.AUDIT_LOG_RETENTION_DAYS || '30', 10);
+      return Number.isFinite(val) && val >= 1 ? val : 30;
+    })(),
+    archiveDir: process.env.AUDIT_LOG_ARCHIVE_DIR || 'storage/archives/audit-logs',
+    cleanupIntervalMs: (() => {
+      const val = parseInt(process.env.AUDIT_LOG_CLEANUP_INTERVAL_MS || '86400000', 10);
+      return Number.isFinite(val) && val >= 60000 ? val : 86400000;
     })(),
   },
 };
