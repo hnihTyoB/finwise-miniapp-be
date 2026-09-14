@@ -234,6 +234,10 @@ export const envConfig = {
     apiBaseUrl: 'https://bot-api.zaloplatforms.com',
     secretToken: process.env.ZALO_BOT_SECRET_TOKEN || '',
     webhookUrl: process.env.ZALO_BOT_WEBHOOK_URL || '',
+    botId: process.env.ZALO_BOT_ID || '3517263789471244097',
+    botUsername: process.env.ZALO_BOT_USERNAME || 'bot.uGsxQaGt',
+    botDisplayName: process.env.ZALO_BOT_DISPLAY_NAME || 'Bot Finwise',
+    botDeepLinkUrl: process.env.ZALO_BOT_DEEP_LINK_URL || 'https://bot.zaloplatforms.com/bots/3517263789471244097',
     linkCodeTtlSeconds: (() => {
       const val = parseInt(process.env.ZALO_BOT_LINK_CODE_TTL_SECONDS || '600', 10);
       return Number.isFinite(val) && val >= 60 && val <= 3600 ? val : 600;

@@ -33,16 +33,16 @@ export class ZaloBotController {
       }
 
       const result = await zaloBotLinkService.generateLinkCode(userId);
-      const botId = envConfig.zaloBot.token.split(':')[0] || '2012016088824880961';
+      const { botId, botUsername, botDisplayName, botDeepLinkUrl } = envConfig.zaloBot;
       res.json({
         success: true,
         data: {
           linkCode: result.linkCode,
           expiresInSeconds: result.expiresInSeconds,
           botId,
-          botUsername: 'bot.uGsxQaGt',
-          botDisplayName: 'Bot Finwise',
-          deepLinkUrl: 'https://zalo.me/bot.uGsxQaGt',
+          botUsername,
+          botDisplayName,
+          deepLinkUrl: botDeepLinkUrl,
           instruction: result.deepLinkInstruction,
         },
       });
