@@ -48,7 +48,7 @@ export class WebhookQueueService {
     };
 
     try {
-      this.queue = new Queue<WebhookJobData>('finwise:webhook-deliveries', {
+      this.queue = new Queue<WebhookJobData>('finwise-webhook-deliveries', {
         connection,
         defaultJobOptions: {
           attempts: 5,
@@ -62,7 +62,7 @@ export class WebhookQueueService {
       });
 
       this.worker = new Worker<WebhookJobData>(
-        'finwise:webhook-deliveries',
+        'finwise-webhook-deliveries',
         async (job: Job<WebhookJobData>) => {
           await this.processJob(job.data, job.attemptsMade + 1);
         },
