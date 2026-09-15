@@ -180,35 +180,47 @@ export const envConfig = {
   redis: {
     url: process.env.REDIS_URL || '',
     host: (() => {
-      if (process.env.REDIS_HOST) return process.env.REDIS_HOST;
       if (process.env.REDIS_URL) {
         try {
           return new URL(process.env.REDIS_URL).hostname || 'localhost';
         } catch {
-          return 'localhost';
+          // fallback
         }
       }
+      if (process.env.REDIS_HOST) return process.env.REDIS_HOST;
       return 'localhost';
     })(),
     port: (() => {
-      if (process.env.REDIS_PORT) return parseInt(process.env.REDIS_PORT, 10);
       if (process.env.REDIS_URL) {
         try {
           const p = new URL(process.env.REDIS_URL).port;
-          return p ? parseInt(p, 10) : 6379;
+          if (p) return parseInt(p, 10);
         } catch {
-          return 6379;
+          // fallback
         }
       }
+      if (process.env.REDIS_PORT) return parseInt(process.env.REDIS_PORT, 10);
       return 6379;
     })(),
     password: (() => {
-      if (process.env.REDIS_PASSWORD) return process.env.REDIS_PASSWORD;
       if (process.env.REDIS_URL) {
         try {
-          return new URL(process.env.REDIS_URL).password || undefined;
+          const pass = new URL(process.env.REDIS_URL).password;
+          if (pass) return decodeURIComponent(pass);
         } catch {
-          return undefined;
+          // fallback
+        }
+      }
+      if (process.env.REDIS_PASSWORD) return process.env.REDIS_PASSWORD;
+      return undefined;
+    })(),
+    username: (() => {
+      if (process.env.REDIS_URL) {
+        try {
+          const user = new URL(process.env.REDIS_URL).username;
+          if (user) return decodeURIComponent(user);
+        } catch {
+          // fallback
         }
       }
       return undefined;
