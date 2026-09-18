@@ -13,8 +13,7 @@ DECLARE
   uuid_bytes bytea;
 BEGIN
   unix_ts_ms = substring(int8send(floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint) FROM 3);
-  uuid_bytes = uuid_bytes ||
-               unix_ts_ms ||
+  uuid_bytes = unix_ts_ms ||
                substring(gen_random_bytes(10) FROM 1 FOR 2) ||
                gen_random_bytes(8);
   -- Set version to 7 (bits 48–51 = 0111)
