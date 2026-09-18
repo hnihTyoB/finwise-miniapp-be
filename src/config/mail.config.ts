@@ -1,6 +1,10 @@
 export const mailConfig = {
   get appUrl(): string {
-    return (process.env.APP_URL || process.env.RENDER_EXTERNAL_URL || 'http://localhost:7777').replace(/\/+$/, '');
+    const custom = process.env.APP_URL;
+    if (process.env.RENDER_EXTERNAL_URL && (!custom || custom.includes('localhost'))) {
+      return process.env.RENDER_EXTERNAL_URL.replace(/\/+$/, '');
+    }
+    return (custom || 'http://localhost:7777').replace(/\/+$/, '');
   },
   host: process.env.MAIL_HOST || 'smtp.gmail.com',
   port: parseInt(process.env.MAIL_PORT || '587', 10),
