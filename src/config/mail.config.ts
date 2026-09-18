@@ -12,4 +12,8 @@ export const mailConfig = {
   from: process.env.MAIL_FROM || 'FinWise <noreply@gmail.com>',
   verificationUrl: `${appUrl}/api/v1/auth/verify-email`,
   resetPasswordUrl: `${appUrl}/api/v1/auth/reset-password`,
+  resendApiKey: process.env.RESEND_API_KEY || '',
+  get isConfigured(): boolean {
+    return Boolean(this.resendApiKey || (this.auth.user && this.auth.pass));
+  },
 };

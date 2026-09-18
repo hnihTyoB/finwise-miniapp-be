@@ -85,7 +85,7 @@ export class NotificationDeliveryService {
 
   private async deliver(delivery: NonNullable<Awaited<ReturnType<NotificationRepository['claimDelivery']>>>): Promise<string | null> {
     if (delivery.channel === NotificationChannel.EMAIL) {
-      if (!mailConfig.auth.user || !mailConfig.auth.pass) {
+      if (!mailConfig.isConfigured) {
         return 'Email provider is not configured';
       }
       if (!delivery.notification.user.email) {

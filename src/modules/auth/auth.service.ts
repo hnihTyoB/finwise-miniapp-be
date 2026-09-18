@@ -258,7 +258,11 @@ export class AuthService {
 
     await this.repository.createVerificationToken(user.id, tokenHash, expiresAt);
 
-    await this.mailService.sendVerificationEmail(email, rawToken, fullName || undefined);
+    try {
+      await this.mailService.sendVerificationEmail(email, rawToken, fullName || undefined);
+    } catch (mailError) {
+      console.error('[AuthService] Verification email delivery failed (user created, token ready):', mailError);
+    }
   }
 
   async verifyEmail(token: string): Promise<void> {
@@ -384,7 +388,11 @@ export class AuthService {
 
     await this.repository.createPasswordResetToken(user.id, tokenHash, expiresAt);
 
-    await this.mailService.sendPasswordResetEmail(user.email!, rawToken, user.fullName || undefined);
+    try {
+      await this.mailService.sendPasswordResetEmail(user.email!, rawToken, user.fullName || undefined);
+    } catch (mailError) {
+      console.error('[AuthService] Password reset email delivery failed:', mailError);
+    }
   }
 
   async resetPassword(data: ResetPasswordDto): Promise<void> {
@@ -418,7 +426,11 @@ export class AuthService {
 
     await this.repository.createVerificationToken(user.id, tokenHash, expiresAt);
 
-    await this.mailService.sendVerificationEmail(user.email!, rawToken, user.fullName || undefined);
+    try {
+      await this.mailService.sendVerificationEmail(user.email!, rawToken, user.fullName || undefined);
+    } catch (mailError) {
+      console.error('[AuthService] Resend verification email delivery failed:', mailError);
+    }
   }
 
   async getActiveSessions(
