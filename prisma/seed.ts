@@ -14,6 +14,7 @@ import {
   SettingCategory,
 } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { uuidv7 } from 'uuidv7';
 
 
 const prisma = new PrismaClient();
@@ -33,7 +34,7 @@ async function main() {
     const role = await prisma.role.upsert({
       where: { name: r.name },
       update: { description: r.description, isSystem: r.isSystem },
-      create: { name: r.name, description: r.description, isSystem: r.isSystem },
+      create: { id: uuidv7(), name: r.name, description: r.description, isSystem: r.isSystem },
     });
     roleMap[r.name] = role.id;
     console.log(`Role ${r.name} upserted with ID ${role.id}`);
@@ -162,7 +163,7 @@ async function main() {
         description: p.description,
         isSystem: p.isSystem,
       },
-      create: p,
+      create: { id: uuidv7(), ...p },
     });
     permissionMap[p.name] = perm.id;
   }
@@ -180,6 +181,7 @@ async function main() {
       },
       update: {},
       create: {
+        id: uuidv7(),
         roleId: roleMap['SUPER_ADMIN'],
         permissionId: permId,
       },
@@ -197,6 +199,7 @@ async function main() {
       },
       update: {},
       create: {
+        id: uuidv7(),
         roleId: roleMap['ADMIN'],
         permissionId: permId,
       },
@@ -235,6 +238,7 @@ async function main() {
         },
         update: {},
         create: {
+          id: uuidv7(),
           roleId: roleMap['USER'],
           permissionId: permId,
         },
@@ -269,6 +273,7 @@ async function main() {
         },
         update: {},
         create: {
+          id: uuidv7(),
           roleId: roleMap['MANAGER'],
           permissionId: permId,
         },
@@ -297,6 +302,7 @@ async function main() {
       isActive: true,
     },
     create: {
+      id: uuidv7(),
       email: superAdminEmail,
       password: superAdminPassword,
       fullName: 'Super Admin',
@@ -314,6 +320,7 @@ async function main() {
       isActive: true,
     },
     create: {
+      id: uuidv7(),
       email: adminEmail,
       password: adminPassword,
       fullName: 'Admin',
@@ -331,6 +338,7 @@ async function main() {
       isActive: true,
     },
     create: {
+      id: uuidv7(),
       email: managerEmail,
       password: managerPassword,
       fullName: 'Manager',
@@ -348,6 +356,7 @@ async function main() {
       isActive: true,
     },
     create: {
+      id: uuidv7(),
       email: userEmail,
       password: userPassword,
       fullName: 'Demo User',
@@ -498,6 +507,7 @@ async function seedDemoData(userId: string) {
     where: { userId_name: { userId, name: 'Ví tiền mặt' } },
     update: {},
     create: {
+      id: uuidv7(),
       userId,
       name: 'Ví tiền mặt',
       balance: 4500000.00,
@@ -513,6 +523,7 @@ async function seedDemoData(userId: string) {
     where: { userId_name: { userId, name: 'Tài khoản Techcombank' } },
     update: {},
     create: {
+      id: uuidv7(),
       userId,
       name: 'Tài khoản Techcombank',
       balance: 85300000.00,
@@ -528,6 +539,7 @@ async function seedDemoData(userId: string) {
     where: { userId_name: { userId, name: 'Sổ tiết kiệm Techcombank' } },
     update: {},
     create: {
+      id: uuidv7(),
       userId,
       name: 'Sổ tiết kiệm Techcombank',
       balance: 100000000.00,
@@ -734,7 +746,7 @@ async function seedDemoData(userId: string) {
   ];
 
   for (const tx of transactionsData) {
-    await prisma.transaction.create({ data: tx });
+    await prisma.transaction.create({ data: { id: uuidv7(), ...tx } });
   }
 
   // 3. Budgets
@@ -743,6 +755,7 @@ async function seedDemoData(userId: string) {
   // Ngân sách tổng tháng này
   const budgetOverall = await prisma.budget.create({
     data: {
+      id: uuidv7(),
       userId,
       name: 'Ngân sách Chi tiêu Tháng 8',
       amount: 15000000,
@@ -758,6 +771,7 @@ async function seedDemoData(userId: string) {
   // Ngân sách danh mục Food & Dining tháng này
   const budgetFood = await prisma.budget.create({
     data: {
+      id: uuidv7(),
       userId,
       categoryId: '20000000-0000-4000-8000-000000000001', // Food & Dining
       name: 'Ngân sách Ăn uống Tháng 8',
@@ -777,6 +791,7 @@ async function seedDemoData(userId: string) {
   // Mục tiêu: Mua Macbook Pro M4
   const goalMacbook = await prisma.savingGoal.create({
     data: {
+      id: uuidv7(),
       userId,
       name: 'Mua Macbook Pro M4',
       targetAmount: 45000000,
@@ -793,18 +808,21 @@ async function seedDemoData(userId: string) {
   await prisma.savingContribution.createMany({
     data: [
       {
+        id: uuidv7(),
         savingGoalId: goalMacbook.id,
         amount: 10000000,
         contributedAt: new Date('2026-06-10T10:00:00Z'),
         note: 'Tiền thưởng dự án tháng 5',
       },
       {
+        id: uuidv7(),
         savingGoalId: goalMacbook.id,
         amount: 5000000,
         contributedAt: new Date('2026-07-10T10:00:00Z'),
         note: 'Tích luỹ lương tháng 6',
       },
       {
+        id: uuidv7(),
         savingGoalId: goalMacbook.id,
         amount: 5000000,
         contributedAt: new Date('2026-08-05T10:00:00Z'),
@@ -819,6 +837,7 @@ async function seedDemoData(userId: string) {
   await prisma.notification.createMany({
     data: [
       {
+        id: uuidv7(),
         userId,
         type: NotificationType.BUDGET_NEAR_LIMIT,
         priority: NotificationPriority.NORMAL,
@@ -830,6 +849,7 @@ async function seedDemoData(userId: string) {
         sourceId: budgetFood.id,
       },
       {
+        id: uuidv7(),
         userId,
         type: NotificationType.SAVING_GOAL_ACHIEVED,
         priority: NotificationPriority.HIGH,
@@ -848,6 +868,7 @@ async function seedDemoData(userId: string) {
 
   await prisma.reminder.create({
     data: {
+      id: uuidv7(),
       userId,
       type: ReminderType.RECURRING_PAYMENT,
       title: 'Đóng tiền điện & nước',
@@ -1129,7 +1150,7 @@ async function seedDemoData(userId: string) {
         bodyTemplate: template.bodyTemplate,
         isActive: template.isActive,
       },
-      create: template,
+      create: { id: uuidv7(), ...template },
     });
   }
   console.log(`Upserted ${defaultTemplates.length} notification templates`);

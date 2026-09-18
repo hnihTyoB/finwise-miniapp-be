@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { uuidv7 } from '../../common/helpers/uuid.helper';
 import {
   DeleteObjectCommand,
   GetObjectCommand,
@@ -46,7 +46,7 @@ export class ReceiptFileService {
       );
     }
 
-    const key = `receipts/${userId}/${randomUUID()}${extension}`;
+    const key = `receipts/${userId}/${uuidv7()}${extension}`;
     const client = this.createR2Client();
     await client.send(new PutObjectCommand({
       Bucket: envConfig.r2.bucketName,

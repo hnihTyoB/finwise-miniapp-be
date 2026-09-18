@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { uuidv7 } from '../../common/helpers/uuid.helper';
 import { WebhookRepository } from './webhook.repository';
 import {
   CreateWebhookDto,
@@ -115,7 +116,7 @@ export class WebhookService {
       throw new AppError('Webhook endpoint not found', 404, ERROR_CODE.WEBHOOK_NOT_FOUND);
     }
 
-    const eventId = `evt_${crypto.randomUUID()}`;
+    const eventId = `evt_${uuidv7()}`;
     const payload = {
       message: 'Ping from FinWise Webhook Test',
       timestamp: new Date().toISOString(),
