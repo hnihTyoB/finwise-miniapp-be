@@ -16,6 +16,7 @@ export class MailService {
       host: mailConfig.host,
       port: mailConfig.port,
       secure: mailConfig.secure,
+      family: 4, // Force IPv4 to prevent ENETUNREACH on environments without IPv6 routing
       auth: {
         user: mailConfig.auth.user,
         pass: mailConfig.auth.pass,
@@ -24,7 +25,7 @@ export class MailService {
       connectionTimeout: 5000,
       greetingTimeout: 5000,
       socketTimeout: 8000,
-    });
+    } as any);
   }
 
   private async sendViaResend(options: SendMailOptions): Promise<void> {
