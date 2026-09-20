@@ -104,7 +104,7 @@ enum RecurringTransactionOccurrenceStatus {
 }
 
 model User {
-  id              String    @id @default(uuid()) @db.Uuid
+  id              String    @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   email           String?   @unique
   password        String?
   fullName        String?   @map("full_name")
@@ -139,6 +139,7 @@ model User {
   apiKeys                       ApiKey[]
   webhookEndpoints              WebhookEndpoint[]
   asyncJobs                     AsyncJob[]
+  statementJobs                 StatementJob[]
 
   @@index([roleId])
   @@index([deletedAt, isActive])
@@ -146,7 +147,7 @@ model User {
 }
 
 model Role {
-  id              String           @id @default(uuid()) @db.Uuid
+  id              String           @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   name            String           @unique
   description     String?
   isSystem        Boolean          @default(false) @map("is_system")
@@ -159,7 +160,7 @@ model Role {
 }
 
 model Permission {
-  id              String           @id @default(uuid()) @db.Uuid
+  id              String           @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   name            String           @unique
   description     String?
   resource        String           @db.VarChar(100)
@@ -174,7 +175,7 @@ model Permission {
 }
 
 model RolePermission {
-  id           String     @id @default(uuid()) @db.Uuid
+  id           String     @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   roleId       String     @map("role_id") @db.Uuid
   permissionId String     @map("permission_id") @db.Uuid
   createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -189,7 +190,7 @@ model RolePermission {
 }
 
 model AuditLog {
-  id            String   @id @default(uuid()) @db.Uuid
+  id            String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   actorId       String?  @map("actor_id") @db.Uuid
   action        String   @db.VarChar(100)
   targetType    String   @map("target_type") @db.VarChar(100)
@@ -208,7 +209,7 @@ model AuditLog {
 }
 
 model Wallet {
-  id          String   @id @default(uuid()) @db.Uuid
+  id          String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   userId      String   @map("user_id") @db.Uuid
   name        String
   balance     Decimal  @default(0) @db.Decimal(18, 2)
@@ -226,6 +227,7 @@ model Wallet {
   outgoingTransfers             Transfer[]                     @relation("TransferSourceWallet")
   incomingTransfers             Transfer[]                     @relation("TransferDestinationWallet")
   recurringTransactionSchedules RecurringTransactionSchedule[]
+  statementJobs                 StatementJob[]
 
   @@unique([userId, name])
   @@index([userId, isArchived])
@@ -233,7 +235,7 @@ model Wallet {
 }
 
 model Category {
-  id         String          @id @default(uuid()) @db.Uuid
+  id         String          @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   userId     String?         @map("user_id") @db.Uuid
   parentId   String?         @map("parent_id") @db.Uuid
   name       String
@@ -260,7 +262,7 @@ model Category {
 }
 
 model Transaction {
-  id          String          @id @default(uuid()) @db.Uuid
+  id          String          @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   userId      String          @map("user_id") @db.Uuid
   walletId    String          @map("wallet_id") @db.Uuid
   categoryId  String          @map("category_id") @db.Uuid
@@ -292,7 +294,7 @@ model Transaction {
 }
 
 model Transfer {
-  id                  String   @id @default(uuid()) @db.Uuid
+  id                  String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   userId              String   @map("user_id") @db.Uuid
   sourceWalletId      String   @map("source_wallet_id") @db.Uuid
   destinationWalletId String   @map("destination_wallet_id") @db.Uuid
@@ -322,7 +324,7 @@ enum BudgetRolloverMode {
 }
 
 model Budget {
-  id                String             @id @default(uuid()) @db.Uuid
+  id                String             @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   userId            String             @map("user_id") @db.Uuid
   categoryId        String?            @map("category_id") @db.Uuid
   name              String
@@ -362,7 +364,7 @@ model Budget {
 }
 
 model SavingGoal {
-  id           String           @id @default(uuid()) @db.Uuid
+  id           String           @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   userId       String           @map("user_id") @db.Uuid
   name         String
   targetAmount Decimal          @map("target_amount") @db.Decimal(18, 2)
@@ -388,7 +390,7 @@ model SavingGoal {
 }
 
 model SavingContribution {
-  id            String   @id @default(uuid()) @db.Uuid
+  id            String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   savingGoalId  String   @map("saving_goal_id") @db.Uuid
   amount        Decimal  @db.Decimal(18, 2)
   contributedAt DateTime @default(now()) @map("contributed_at") @db.Timestamptz(3)
@@ -403,7 +405,7 @@ model SavingContribution {
 }
 
 model RefreshToken {
-  id        String   @id @default(uuid()) @db.Uuid
+  id        String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   token     String   @unique
   userId    String   @map("user_id") @db.Uuid
   userAgent String?  @map("user_agent")
@@ -419,7 +421,7 @@ model RefreshToken {
 }
 
 model UserSocial {
-  id             String   @id @default(uuid()) @db.Uuid
+  id             String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   userId         String   @map("user_id") @db.Uuid
   provider       String // "ZALO", "GOOGLE", etc.
   providerUserId String   @map("provider_user_id")
@@ -433,7 +435,7 @@ model UserSocial {
 }
 
 model VerificationToken {
-  id        String   @id @default(uuid()) @db.Uuid
+  id        String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   token     String   @unique
   userId    String   @map("user_id") @db.Uuid
   expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
@@ -447,7 +449,7 @@ model VerificationToken {
 }
 
 model PasswordResetToken {
-  id        String   @id @default(uuid()) @db.Uuid
+  id        String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   token     String   @unique
   userId    String   @map("user_id") @db.Uuid
   expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
@@ -461,7 +463,7 @@ model PasswordResetToken {
 }
 
 model UserDevice {
-  id          String   @id @default(uuid()) @db.Uuid
+  id          String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   userId      String   @map("user_id") @db.Uuid
   deviceHash  String   @map("device_hash")
   deviceName  String?  @map("device_name")
@@ -476,7 +478,7 @@ model UserDevice {
 }
 
 model Notification {
-  id         String                  @id @default(uuid()) @db.Uuid
+  id         String                  @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   userId     String                  @map("user_id") @db.Uuid
   type       NotificationType
   priority   NotificationPriority    @default(NORMAL)
@@ -504,7 +506,7 @@ model Notification {
 }
 
 model NotificationDelivery {
-  id                String                     @id @default(uuid()) @db.Uuid
+  id                String                     @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   notificationId    String                     @map("notification_id") @db.Uuid
   channel           NotificationChannel
   status            NotificationDeliveryStatus @default(PENDING)
@@ -525,9 +527,10 @@ model NotificationDelivery {
 }
 
 model NotificationSetting {
-  id                      String                @id @default(uuid()) @db.Uuid
+  id                      String                @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   userId                  String                @unique @map("user_id") @db.Uuid
   channels                NotificationChannel[] @default([IN_APP])
+  zaloBotChatId           String?               @map("zalo_bot_chat_id") @db.VarChar(100)
   budgetAlertsEnabled     Boolean               @default(true) @map("budget_alerts_enabled")
   savingGoalAlertsEnabled Boolean               @default(true) @map("saving_goal_alerts_enabled")
   reminderAlertsEnabled   Boolean               @default(true) @map("reminder_alerts_enabled")
@@ -541,7 +544,7 @@ model NotificationSetting {
 }
 
 model Reminder {
-  id              String            @id @default(uuid()) @db.Uuid
+  id              String            @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   userId          String            @map("user_id") @db.Uuid
   type            ReminderType      @default(GENERAL)
   title           String            @db.VarChar(160)
@@ -565,7 +568,7 @@ model Reminder {
 }
 
 model RecurringTransactionSchedule {
-  id              String                              @id @default(uuid()) @db.Uuid
+  id              String                              @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   userId          String                              @map("user_id") @db.Uuid
   walletId        String                              @map("wallet_id") @db.Uuid
   categoryId      String                              @map("category_id") @db.Uuid
@@ -598,7 +601,7 @@ model RecurringTransactionSchedule {
 }
 
 model RecurringTransactionOccurrence {
-  id             String                               @id @default(uuid()) @db.Uuid
+  id             String                               @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   scheduleId     String                               @map("schedule_id") @db.Uuid
   scheduledFor   DateTime                             @map("scheduled_for") @db.Date
   status         RecurringTransactionOccurrenceStatus @default(POSTED)
@@ -650,7 +653,7 @@ model SystemSetting {
 }
 
 model NotificationTemplate {
-  id            String              @id @default(uuid()) @db.Uuid
+  id            String              @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   type          NotificationType
   channel       NotificationChannel @default(IN_APP)
   language      String              @default("vi") @db.VarChar(10)
@@ -672,7 +675,7 @@ enum AiRequestStatus {
 }
 
 model AiRequestLog {
-  id               String          @id @default(uuid()) @db.Uuid
+  id               String          @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   userId           String?         @map("user_id") @db.Uuid
   feature          String          @db.VarChar(50)
   provider         String          @db.VarChar(50)
@@ -699,7 +702,7 @@ enum ApiKeyStatus {
 }
 
 model ApiKey {
-  id          String       @id @default(uuid()) @db.Uuid
+  id          String       @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   userId      String       @map("user_id") @db.Uuid
   name        String       @db.VarChar(100)
   keyPrefix   String       @map("key_prefix") @db.VarChar(16)
@@ -731,7 +734,7 @@ enum WebhookDeliveryStatus {
 }
 
 model WebhookEndpoint {
-  id              String        @id @default(uuid()) @db.Uuid
+  id              String        @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   userId          String        @map("user_id") @db.Uuid
   url             String        @db.VarChar(500)
   description     String?       @db.VarChar(255)
@@ -750,7 +753,7 @@ model WebhookEndpoint {
 }
 
 model WebhookDelivery {
-  id                String                @id @default(uuid()) @db.Uuid
+  id                String                @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   webhookEndpointId String                @map("webhook_endpoint_id") @db.Uuid
   eventId           String                @map("event_id") @db.VarChar(100)
   event             String                @db.VarChar(100)
@@ -781,7 +784,7 @@ enum AsyncJobStatus {
 }
 
 model AsyncJob {
-  id          String         @id @default(uuid()) @db.Uuid
+  id          String         @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   userId      String         @map("user_id") @db.Uuid
   type        String         @db.VarChar(100)
   status      AsyncJobStatus @default(PENDING)
@@ -803,3 +806,47 @@ model AsyncJob {
   @@map("async_jobs")
 }
 
+enum StatementExportFormat {
+  XLSX
+  PDF
+  CSV
+}
+
+enum StatementJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model StatementJob {
+  id                  String                @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  userId              String                @map("user_id") @db.Uuid
+  walletId            String?               @map("wallet_id") @db.Uuid
+  format              StatementExportFormat
+  status              StatementJobStatus    @default(PENDING)
+  dateFrom            DateTime              @map("date_from") @db.Date
+  dateTo              DateTime              @map("date_to") @db.Date
+  isPasswordProtected Boolean               @default(false) @map("is_password_protected")
+  passwordHint        String?               @map("password_hint") @db.VarChar(100)
+  fileUrl             String?               @map("file_url") @db.Text
+  fileKey             String?               @map("file_key") @db.VarChar(512)
+  fileSize            Int?                  @map("file_size")
+  recordCount         Int?                  @map("record_count")
+  verificationCode    String                @unique @map("verification_code") @db.VarChar(64)
+  error               String?               @db.Text
+  expiresAt           DateTime?             @map("expires_at") @db.Timestamptz(3)
+  startedAt           DateTime?             @map("started_at") @db.Timestamptz(3)
+  completedAt         DateTime?             @map("completed_at") @db.Timestamptz(3)
+  createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wallet Wallet? @relation(fields: [walletId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status, createdAt])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([verificationCode])
+  @@index([expiresAt])
+  @@map("statement_jobs")
+}

@@ -1,0 +1,74 @@
+import { Request, Response, NextFunction } from 'express';
+import { statementService } from './statement.service';
+import { CreateStatementExportInput, StatementHistoryQuery } from './statement.validation';
+
+export class StatementController {
+  initiateExport = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = req.user!.id;
+      const body = req.body as CreateStatementExportInput;
+      const result = await statementService.initiateExport(userId, {
+        walletId: body.walletId,
+        dateFrom: body.dateFrom,
+        dateTo: body.dateTo,
+        format: body.format,
+        password: body.password,
+        passwordHint: body.passwordHint,
+      });
+      res.status(202).json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  getJob = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = req.user!.id;
+      const { id } = req.params;
+      const result = await statementService.getJob(userId, id);
+      res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  downloadStatement = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = req.user!.id;
+      const { id } = req.params;
+      const result = await statementService.downloadStatement(userId, id);
+      if (result.type === 'redirect') {
+        res.redirect(result.url);
+        return;
+      }
+      if (result.type === 'file') {
+        res.download(result.filePath, result.fileName);
+        return;
+      }
+      res.status(404).json({ success: false, message: 'File not found' });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  listHistory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = req.user!.id;
+      const query = req.query as unknown as StatementHistoryQuery;
+      const result = await statementService.listJobs(userId, query.page, query.limit);
+      res.json({ success: true, ...result });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  verifyStatement = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { code } = req.params;
+      const result = await statementService.verifyStatement(code);
+      res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  };
+}

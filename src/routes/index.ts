@@ -16,9 +16,9 @@ import forecastRoute from '../modules/forecast/forecast.route';
 import simulationRoute from '../modules/simulations/simulation.route';
 import anomalyRoute from '../modules/anomalies/anomaly.route';
 import subscriptionRoute from '../modules/subscriptions/subscription.route';
-import queryRoute from '../modules/query/query.route';
 import recurringTransactionRoute from '../modules/recurring-transactions/recurring-transaction.route';
-import { rolesRouter, permissionsRouter, auditLogsRouter } from '../modules/rbac/rbac.route';
+import { rolesRouter, permissionsRouter } from '../modules/rbac/rbac.route';
+import { auditLogsRouter } from '../modules/audit-logs/audit-log.route';
 import { adminSettingsRouter, publicSystemRouter } from '../modules/system-settings/system-setting.route';
 import { adminNotificationsRouter } from '../modules/notifications/admin-notification.route';
 import { adminAiRouter } from '../modules/ai-assistant/admin-ai.route';
@@ -31,6 +31,9 @@ import { healthCheck, healthCheckDetail } from './health.controller';
 import apiKeyRoute from '../modules/api-keys/api-key.route';
 import webhookRoute from '../modules/webhooks/webhook.route';
 import jobRoute from '../modules/jobs/job.route';
+import zaloBotRoute from '../modules/zalo-bot/zalo-bot.route';
+import queryRoute from '../modules/query/query.route';
+import statementRoute from '../modules/statements/statement.route';
 
 const router = Router();
 
@@ -44,6 +47,7 @@ router.use('/auth', authRoute);
 router.use('/api-keys', apiKeyRoute);
 router.use('/webhooks', webhookRoute);
 router.use('/jobs', jobRoute);
+router.use('/zalo-bot', zaloBotRoute);
 router.use('/users', userRoute);
 router.use('/roles', rolesRouter);
 router.use('/permissions', permissionsRouter);
@@ -68,6 +72,6 @@ router.use('/notifications', notificationRoute);
 router.use('/reminders', reminderRoute);
 router.use('/ai-assistant', aiAssistantRoute);
 router.use('/uploads', uploadRoute);
+router.use('/statements', statementRoute);
 
 export default router;
-

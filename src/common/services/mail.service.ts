@@ -1,6 +1,13 @@
 import nodemailer from 'nodemailer';
 import { mailConfig } from '../../config/mail.config';
 
+interface SendMailOptions {
+  to: string;
+  subject: string;
+  html: string;
+  from?: string;
+}
+
 export class MailService {
   private transporter: nodemailer.Transporter;
 
@@ -9,16 +16,62 @@ export class MailService {
       host: mailConfig.host,
       port: mailConfig.port,
       secure: mailConfig.secure,
+      family: 4, // Force IPv4 to prevent ENETUNREACH on environments without IPv6 routing
       auth: {
         user: mailConfig.auth.user,
         pass: mailConfig.auth.pass,
       },
+      // Explicit timeouts to prevent hanging indefinitely on cloud platforms (e.g. Render)
+      connectionTimeout: 5000,
+      greetingTimeout: 5000,
+      socketTimeout: 8000,
+    } as any);
+  }
+
+  private async sendViaResend(options: SendMailOptions): Promise<void> {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${mailConfig.resendApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: options.from || mailConfig.from,
+        to: [options.to],
+        subject: options.subject,
+        html: options.html,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`Resend API HTTP ${response.status}: ${errorText}`);
+    }
+  }
+
+  private async dispatchEmail(options: SendMailOptions): Promise<void> {
+    // If Resend API key is configured, send via HTTPS REST API (bypasses blocked SMTP ports on cloud hosts)
+    if (mailConfig.resendApiKey) {
+      await this.sendViaResend(options);
+      return;
+    }
+
+    // Otherwise use SMTP (nodemailer)
+    if (!mailConfig.auth.user || !mailConfig.auth.pass) {
+      return;
+    }
+
+    await this.transporter.sendMail({
+      from: options.from || mailConfig.from,
+      to: options.to,
+      subject: options.subject,
+      html: options.html,
     });
   }
 
   async sendVerificationEmail(email: string, token: string, fullName?: string) {
     const verificationUrl = `${mailConfig.verificationUrl}?token=${token}`;
-    const mailOptions = {
+    const mailOptions: SendMailOptions = {
       from: mailConfig.from,
       to: email,
       subject: 'Xác thực tài khoản FinWise',
@@ -40,7 +93,7 @@ export class MailService {
       `,
     };
 
-    if (!mailConfig.auth.user || !mailConfig.auth.pass) {
+    if (!mailConfig.isConfigured) {
       console.warn('-------- EMAIL VERIFICATION TOKEN (DEV MODE) --------');
       console.warn(`To: ${email}`);
       console.warn(`Link: ${verificationUrl}`);
@@ -49,16 +102,20 @@ export class MailService {
     }
 
     try {
-      await this.transporter.sendMail(mailOptions);
+      await this.dispatchEmail(mailOptions);
     } catch (error) {
-      console.error('Failed to send verification email:', error);
+      console.error('[MailService] Failed to send verification email:', error);
+      console.warn('-------- VERIFICATION LINK FALLBACK (LOG) --------');
+      console.warn(`To: ${email}`);
+      console.warn(`Link: ${verificationUrl}`);
+      console.warn('--------------------------------------------------');
       throw error;
     }
   }
 
   async sendPasswordResetEmail(email: string, token: string, fullName?: string) {
     const resetUrl = `${mailConfig.resetPasswordUrl}?token=${token}`;
-    const mailOptions = {
+    const mailOptions: SendMailOptions = {
       from: mailConfig.from,
       to: email,
       subject: 'Khôi phục mật khẩu tài khoản FinWise',
@@ -80,7 +137,7 @@ export class MailService {
       `,
     };
 
-    if (!mailConfig.auth.user || !mailConfig.auth.pass) {
+    if (!mailConfig.isConfigured) {
       console.warn('-------- EMAIL PASSWORD RESET TOKEN (DEV MODE) --------');
       console.warn(`To: ${email}`);
       console.warn(`Link: ${resetUrl}`);
@@ -89,16 +146,26 @@ export class MailService {
     }
 
     try {
-      await this.transporter.sendMail(mailOptions);
+      await this.dispatchEmail(mailOptions);
     } catch (error) {
-      console.error('Failed to send password reset email:', error);
+      console.error('[MailService] Failed to send password reset email:', error);
+      console.warn('-------- PASSWORD RESET LINK FALLBACK (LOG) --------');
+      console.warn(`To: ${email}`);
+      console.warn(`Link: ${resetUrl}`);
+      console.warn('----------------------------------------------------');
       throw error;
     }
   }
 
-  async sendNewDeviceAlertEmail(email: string, details: { deviceName: string; ipAddress: string; loginTime: Date }, fullName?: string) {
-    const formattedDate = details.loginTime.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
-    const mailOptions = {
+  async sendNewDeviceAlertEmail(
+    email: string,
+    details: { deviceName: string; ipAddress: string; loginTime: Date },
+    fullName?: string,
+  ) {
+    const formattedDate = details.loginTime.toLocaleString('vi-VN', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+    });
+    const mailOptions: SendMailOptions = {
       from: mailConfig.from,
       to: email,
       subject: '[Cảnh báo bảo mật] Đăng nhập từ thiết bị mới trên FinWise',
@@ -127,7 +194,7 @@ export class MailService {
       `,
     };
 
-    if (!mailConfig.auth.user || !mailConfig.auth.pass) {
+    if (!mailConfig.isConfigured) {
       console.warn('-------- NEW DEVICE ALERT EMAIL (DEV MODE) --------');
       console.warn(`To: ${email}`);
       console.warn(`Device: ${details.deviceName}`);
@@ -138,10 +205,10 @@ export class MailService {
     }
 
     try {
-      await this.transporter.sendMail(mailOptions);
+      await this.dispatchEmail(mailOptions);
     } catch (error) {
-      console.error('Failed to send new device alert email:', error);
-      throw error;
+      console.error('[MailService] Failed to send new device alert email:', error);
+      // Non-critical alert, don't re-throw to avoid blocking login flow
     }
   }
 
@@ -154,12 +221,13 @@ export class MailService {
     },
     fullName?: string | null,
   ) {
-    const escapeHtml = (value: string) => value
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
+    const escapeHtml = (value: string) =>
+      value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
     const actionUrl = notification.actionUrl
       ? notification.actionUrl.startsWith('/')
         ? `${mailConfig.appUrl}${notification.actionUrl}`
@@ -169,7 +237,7 @@ export class MailService {
       ? `<p style="text-align: center; margin-top: 24px;"><a href="${escapeHtml(actionUrl)}" style="background-color: #2563eb; color: white; padding: 10px 18px; text-decoration: none; border-radius: 5px;">Open FinWise</a></p>`
       : '';
 
-    if (!mailConfig.auth.user || !mailConfig.auth.pass) {
+    if (!mailConfig.isConfigured) {
       console.warn('-------- NOTIFICATION EMAIL (DEV MODE) --------');
       console.warn(`To: ${email}`);
       console.warn(`Subject: ${notification.title}`);
@@ -179,7 +247,7 @@ export class MailService {
     }
 
     try {
-      await this.transporter.sendMail({
+      await this.dispatchEmail({
         from: mailConfig.from,
         to: email,
         subject: `[FinWise] ${notification.title.replace(/[\r\n]+/g, ' ')}`,
@@ -193,7 +261,7 @@ export class MailService {
         `,
       });
     } catch (error) {
-      console.error('Failed to send notification email:', error);
+      console.error('[MailService] Failed to send notification email:', error);
       throw error;
     }
   }

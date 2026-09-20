@@ -5,7 +5,7 @@ import { AuthRepository } from './auth.repository';
 import { AppError } from '../../common/errors/app-error';
 import { ERROR_CODE } from '../../common/errors/error-code';
 import { jwtConfig } from '../../config/jwt.config';
-import { LoginDto, ZaloLoginDto, ZaloProfileResponse, ZaloPhoneResponse, LoginResponseDto, AuthTokensDto, MeDto, RegisterDto, UpdateProfileDto, UpdateAvatarDto, UpdatePasswordDto, ForgotPasswordDto, ResetPasswordDto, ResendVerificationDto, SessionQueryDto, SessionsResponseDto } from './auth.dto';
+import { LoginDto, ZaloLoginDto, ZaloLinkDto, ZaloProfileResponse, ZaloPhoneResponse, LoginResponseDto, AuthTokensDto, MeDto, RegisterDto, UpdateProfileDto, UpdateAvatarDto, UpdatePasswordDto, ForgotPasswordDto, ResetPasswordDto, ResendVerificationDto, SessionQueryDto, SessionsResponseDto } from './auth.dto';
 import https from 'https';
 import { MailService } from '../../common/services/mail.service';
 import { generateDeviceHash, parseUserAgent } from '../../common/helpers/user-agent.helper';
@@ -121,6 +121,7 @@ export class AuthService {
         },
         permissions,
         isActive: user.isActive,
+        zaloLinked: false,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       },
@@ -200,7 +201,10 @@ export class AuthService {
       throw new AppError('User not found', 404, ERROR_CODE.NOT_FOUND);
     }
 
-    const permissions = await rbacService.getUserPermissions(user.id);
+    const [permissions, zaloSocial] = await Promise.all([
+      rbacService.getUserPermissions(user.id),
+      this.repository.findUserSocial(user.id, 'zalo'),
+    ]);
 
     return {
       id: user.id,
@@ -219,6 +223,7 @@ export class AuthService {
       },
       permissions,
       isActive: user.isActive,
+      zaloLinked: Boolean(zaloSocial),
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
@@ -253,7 +258,11 @@ export class AuthService {
 
     await this.repository.createVerificationToken(user.id, tokenHash, expiresAt);
 
-    await this.mailService.sendVerificationEmail(email, rawToken, fullName || undefined);
+    try {
+      await this.mailService.sendVerificationEmail(email, rawToken, fullName || undefined);
+    } catch (mailError) {
+      console.error('[AuthService] Verification email delivery failed (user created, token ready):', mailError);
+    }
   }
 
   async verifyEmail(token: string): Promise<void> {
@@ -379,7 +388,11 @@ export class AuthService {
 
     await this.repository.createPasswordResetToken(user.id, tokenHash, expiresAt);
 
-    await this.mailService.sendPasswordResetEmail(user.email!, rawToken, user.fullName || undefined);
+    try {
+      await this.mailService.sendPasswordResetEmail(user.email!, rawToken, user.fullName || undefined);
+    } catch (mailError) {
+      console.error('[AuthService] Password reset email delivery failed:', mailError);
+    }
   }
 
   async resetPassword(data: ResetPasswordDto): Promise<void> {
@@ -413,7 +426,11 @@ export class AuthService {
 
     await this.repository.createVerificationToken(user.id, tokenHash, expiresAt);
 
-    await this.mailService.sendVerificationEmail(user.email!, rawToken, user.fullName || undefined);
+    try {
+      await this.mailService.sendVerificationEmail(user.email!, rawToken, user.fullName || undefined);
+    } catch (mailError) {
+      console.error('[AuthService] Resend verification email delivery failed:', mailError);
+    }
   }
 
   async getActiveSessions(
@@ -664,6 +681,7 @@ export class AuthService {
         },
         permissions,
         isActive: userWithRole.isActive,
+        zaloLinked: true,
         createdAt: userWithRole.createdAt,
         updatedAt: userWithRole.updatedAt,
       },
@@ -749,5 +767,116 @@ export class AuthService {
       req.on('error', reject);
       req.end();
     });
+  }
+  async linkZaloAccount(
+    userId: string,
+    dto: ZaloLinkDto,
+  ): Promise<MeDto> {
+    const { accessToken } = dto;
+    const appSecret = process.env.ZALO_APP_SECRET || '';
+    const appsecretProof = appSecret
+      ? crypto.createHmac('sha256', appSecret).update(accessToken).digest('hex')
+      : '';
+
+    // Kiểm tra user tồn tại
+    const user = await this.repository.findById(userId);
+    if (!user || !user.isActive) {
+      throw new AppError('User not found or inactive', 401, ERROR_CODE.USER_INACTIVE);
+    }
+
+    // Kiểm tra user đã liên kết Zalo chưa
+    const existingLink = await this.repository.findUserSocial(userId, 'zalo');
+    if (existingLink) {
+      throw new AppError('Tài khoản này đã được liên kết với Zalo.', 409, ERROR_CODE.DUPLICATE_ENTRY);
+    }
+
+    // Xác thực accessToken và lấy Zalo ID từ graph.zalo.me
+    let zaloId = dto.zaloId || '';
+    let zaloName = dto.name || '';
+    let zaloAvatarUrl = dto.avatar || null;
+
+    try {
+      const zaloProfile = await this.fetchZaloProfile(accessToken, appsecretProof);
+      console.log('[ZaloLink] fetchZaloProfile response:', zaloProfile);
+      if (zaloProfile && zaloProfile.id) {
+        zaloId = zaloProfile.id;
+        if (zaloProfile.name) zaloName = zaloProfile.name;
+        if (zaloProfile.picture?.data?.url) zaloAvatarUrl = zaloProfile.picture.data.url;
+      } else if (zaloProfile?.error === -501) {
+        console.warn('[ZaloLink] Server IP is outside Vietnam (-501). Using client zaloId as fallback.');
+      } else if (zaloProfile && zaloProfile.error !== undefined && zaloProfile.error !== 0) {
+        throw new AppError(
+          zaloProfile?.message ? `Zalo Profile Error: ${zaloProfile.message}` : 'Invalid Zalo access token',
+          401,
+          ERROR_CODE.INVALID_CREDENTIALS,
+        );
+      }
+    } catch (err) {
+      if (err instanceof AppError) throw err;
+      console.warn('[ZaloLink] fetchZaloProfile caught error:', err);
+    }
+
+    if (!zaloId) {
+      // Fallback: hash accessToken làm định danh khi IP server bị giới hạn
+      const accHash = crypto.createHash('sha256').update(accessToken).digest('hex').substring(0, 16);
+      zaloId = `zalo_acc_${accHash}`;
+    }
+
+    // Kiểm tra Zalo ID này đã được liên kết với tài khoản khác chưa
+    const existingZaloUser = await this.repository.findBySocial('zalo', zaloId);
+    if (existingZaloUser && existingZaloUser.id !== userId) {
+      throw new AppError(
+        'Tài khoản Zalo này đã được liên kết với một tài khoản khác.',
+        409,
+        ERROR_CODE.DUPLICATE_ENTRY,
+      );
+    }
+
+    // Tạo bản ghi liên kết
+    await this.repository.linkSocialAccount(userId, 'zalo', zaloId);
+
+    // Cập nhật avatar nếu user chưa có
+    if (zaloAvatarUrl && !user.avatarUrl) {
+      try {
+        await this.repository.updateAvatar(userId, { avatarUrl: zaloAvatarUrl });
+      } catch (avatarErr) {
+        console.warn('[ZaloLink] Failed to update avatar:', avatarErr);
+      }
+    }
+
+    // Cập nhật tên nếu user chưa có
+    if (zaloName && !user.fullName) {
+      try {
+        await this.repository.updateProfile(userId, { fullName: zaloName });
+      } catch (nameErr) {
+        console.warn('[ZaloLink] Failed to update fullName:', nameErr);
+      }
+    }
+
+    return this.getMe(userId);
+  }
+
+  async unlinkZaloAccount(userId: string): Promise<MeDto> {
+    const user = await this.repository.findById(userId);
+    if (!user || !user.isActive) {
+      throw new AppError('User not found or inactive', 401, ERROR_CODE.USER_INACTIVE);
+    }
+
+    const existingLink = await this.repository.findUserSocial(userId, 'zalo');
+    if (!existingLink) {
+      throw new AppError('Tài khoản chưa được liên kết với Zalo.', 400, ERROR_CODE.NOT_FOUND);
+    }
+
+    // Chỉ cho phép huỷ liên kết nếu user vẫn có phương thức đăng nhập khác (email/password)
+    if (!user.email && !user.password) {
+      throw new AppError(
+        'Bạn cần có email/mật khẩu trước khi huỷ liên kết Zalo.',
+        400,
+        ERROR_CODE.INVALID_CREDENTIALS,
+      );
+    }
+
+    await this.repository.unlinkSocialAccount(userId, 'zalo');
+    return this.getMe(userId);
   }
 }

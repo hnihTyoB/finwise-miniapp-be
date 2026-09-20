@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { uuidv7 } from '../../common/helpers/uuid.helper';
 import {
   BudgetPeriod,
   BudgetRolloverMode,
@@ -396,7 +396,7 @@ export class BudgetService {
       data.endDate,
     );
     const isRecurring = data.isRecurring ?? false;
-    const recurrenceGroupId = isRecurring ? randomUUID() : null;
+    const recurrenceGroupId = isRecurring ? uuidv7() : null;
     const autoRenew = isRecurring ? (data.autoRenew ?? true) : false;
     const rolloverMode = data.rolloverMode ?? BudgetRolloverMode.RESET;
 
@@ -462,7 +462,7 @@ export class BudgetService {
       data.isRecurring !== undefined ? data.isRecurring : current.isRecurring;
     let recurrenceGroupId = current.recurrenceGroupId;
     if (isRecurring && !recurrenceGroupId) {
-      recurrenceGroupId = randomUUID();
+      recurrenceGroupId = uuidv7();
     } else if (!isRecurring) {
       recurrenceGroupId = null;
     }

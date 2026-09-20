@@ -39,16 +39,17 @@ export class WebhookQueueService {
     }
 
     const isTls = envConfig.redis.url.startsWith('rediss://');
-    const connection = {
+    const connection: any = {
       host: redisHost,
       port: redisPort,
+      username: envConfig.redis.username,
       password: redisPassword,
       tls: isTls ? {} : undefined,
       maxRetriesPerRequest: null,
     };
 
     try {
-      this.queue = new Queue<WebhookJobData>('finwise:webhook-deliveries', {
+      this.queue = new Queue<WebhookJobData>('finwise-webhook-deliveries', {
         connection,
         defaultJobOptions: {
           attempts: 5,
@@ -61,8 +62,12 @@ export class WebhookQueueService {
         },
       });
 
+      this.queue.on('error', (err) => {
+        console.warn('[WebhookQueue] Queue Redis connection error:', err.message);
+      });
+
       this.worker = new Worker<WebhookJobData>(
-        'finwise:webhook-deliveries',
+        'finwise-webhook-deliveries',
         async (job: Job<WebhookJobData>) => {
           await this.processJob(job.data, job.attemptsMade + 1);
         },
@@ -75,6 +80,10 @@ export class WebhookQueueService {
           },
         },
       );
+
+      this.worker.on('error', (err) => {
+        console.warn('[WebhookQueue] Worker Redis connection error:', err.message);
+      });
 
       this.worker.on('failed', (job, err) => {
         console.warn(`[WebhookQueue] Job ${job?.id} failed on attempt ${job?.attemptsMade}:`, err.message);

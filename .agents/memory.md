@@ -54,8 +54,10 @@ File này chỉ lưu sự thật và quyết định dài hạn giúp các phiê
   Saving Goal. Báo cáo dùng khoảng thời gian `[from, to)`, hỗ trợ preset ngày/tuần/tháng/năm
   hoặc custom tối đa 1830 ngày, bucket theo offset múi giờ và luôn tách số tiền theo currency.
 - Notification dùng inbox theo ownership và database-backed delivery outbox với khóa chống
-  trùng theo sự kiện. Kênh mặc định là `IN_APP`; email dùng SMTP hiện có, còn Zalo/push giữ
-  trạng thái delivery riêng để bổ sung provider adapter sau.
+  trùng theo sự kiện. Kênh mặc định là `IN_APP`; email dùng SMTP hiện có; kênh `ZALO` dùng
+  Zalo Bot API (Phase 1 — outbound-only, `sendMessage` qua `ZaloBotService`). `NotificationSetting`
+  lưu `zaloBotChatId` (VARCHAR 100) là chat_id Zalo Bot của user; user tự nhập qua UI sau khi
+  nhắn tin cho bot. Token bot đọc từ env `ZALO_BOT_TOKEN`. Push giữ trạng thái stub.
   Thông báo in-app và số lượng chưa đọc (`unread-count`) được phát thời gian thực tới client qua
   Server-Sent Events (`GET /api/v1/notifications/stream`), quản lý kết nối và phát sóng bởi
   `NotificationStreamService` (hỗ trợ Redis Pub/Sub đa instance và in-memory fallback).
@@ -98,6 +100,26 @@ File này chỉ lưu sự thật và quyết định dài hạn giúp các phiê
 - Mọi route endpoint nghiệp vụ ở backend bắt buộc được bảo vệ bằng middleware `requirePermission(PERMISSIONS.*)`.
 - Các vai trò hệ thống mặc định/bất biến (Bootstrap & System protection) được định nghĩa tập trung qua `SYSTEM_ROLES` trong `src/common/constants/system-role.constant.ts` (ví dụ `SYSTEM_ROLES.USER` cho vai trò đăng ký mặc định, `SYSTEM_ROLES.ADMIN` cho vai trò quản trị bất biến), không dùng `SYSTEM_ROLES` để kiểm tra phân quyền.
 - Endpoint đăng nhập `POST /api/v1/auth/login` hỗ trợ linh hoạt cả email và số điện thoại thông qua trường `email` hoặc `account`, tự động chuẩn hóa định dạng số điện thoại Việt Nam và truy vấn role đi kèm.
+- Luồng Zalo Login (`POST /api/v1/auth/zalo-login`) bắt buộc số điện thoại phải được giải mã từ Zalo Server qua `phoneToken` hoặc Graph API (`isPhoneVerified = true`). Nghiêm cấm gán quyền hoặc liên kết tài khoản dựa trên số điện thoại client tự gửi chưa xác thực (trả về `409 Conflict PHONE_ALREADY_REGISTERED_UNVERIFIED` nếu trùng tài khoản). Các cuộc gọi HTTP ra Zalo Graph API bắt buộc giới hạn timeout tối đa 5 giây qua `AbortSignal.timeout(5000)`.
+- Cơ chế Fail-Fast bảo vệ Secret trên Production: Lúc khởi động (`envConfig`), nếu `NODE_ENV === 'production'`, hệ thống ném ngoại lệ dừng tiến trình ngay lập tức nếu `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, hoặc `API_KEY_SECRET` ngắn hơn 32 ký tự hoặc chứa từ khóa mặc định.
+- AI Natural Language Query (`QueryCompiler`) phân nhóm theo loại tiền tệ của ví (`currencyTotals`), gán `resolvedCurrency = 'MULTI'` và xuất chi tiết từng loại tiền nếu phát hiện giao dịch đa tiền tệ; cấm cộng gộp trực tiếp các loại tiền khác nhau thành một giá trị vô hướng duy nhất.
+- IP Whitelist của API Key (`apiKeyMiddleware`) sử dụng `req.ip || req.socket?.remoteAddress` qua cơ chế tin cậy proxy của Express (`trust proxy`); cấm đọc trực tiếp header `X-Forwarded-For` chưa qua xác thực từ client để chống IP Spoofing.
+- Tách tiến trình gia hạn ngân sách định kỳ (Budget Auto-Renew) hoàn toàn khỏi luồng đọc `GET /budgets` sang worker nền (`notification.worker.ts`) bảo vệ bởi distributed lock (`LockService`), triệt tiêu N+1 queries và transaction lock contention trên API đọc.
+- Rút token JWT qua query string (`?token=`) được giới hạn nghiêm ngặt duy nhất cho kết nối Server-Sent Events (`/api/v1/notifications/stream`). Toàn bộ các API HTTP khác bắt buộc truyền qua header `Authorization: Bearer <token>`.
+- Quét subscription định kỳ và tính toán ngày nghiệp vụ sử dụng thống nhất hàm `instantToBusinessDate()` (`Asia/Ho_Chi_Minh` UTC+7) từ `business-time.ts`.
+- Tự động lưu trữ và dọn dẹp Nhật ký kiểm toán (Audit Log Archiving & Retention): Tích hợp tác vụ định kỳ 24h trong worker nền (`notification.worker.ts`) bảo vệ bởi distributed lock (`LockService`). Mặc định lưu trữ 30 ngày (cấu hình qua SystemSetting `security.audit_log_retention_days`). Trước khi xóa các bản ghi cũ khỏi DB, toàn bộ dữ liệu được nén thành file Gzip (`.json.gz`) lưu trữ tại `storage/archives/audit-logs/` (và tự động upload lên Cloudflare R2 nếu có cấu hình). Hành động dọn dẹp tự động ghi nhận 1 bản ghi kiểm toán `AUDIT_LOGS_ARCHIVE_CLEANUP` lưu metadata đợt dọn dẹp. Cung cấp API `POST /api/v1/audit-logs/archive-cleanup` bảo vệ bởi quyền `AUDIT_LOG_READ` cho quản trị viên kích hoạt thủ công.
+- Module Nhật ký kiểm toán (`src/modules/audit-logs/`) được tách biệt hoàn toàn khỏi `rbac`, gồm đầy đủ các tầng `audit-log.dto`, `audit-log.validation`, `audit-log.repository`, `audit-log.service`, `audit-log-archive.service`, `audit-log.controller`, `audit-log.route`. Mount tại `/api/v1/audit-logs`. `rbacRepository` giữ các hàm uỷ quyền (delegation) `createAuditLog` và `findAllAuditLogs` để đảm bảo tính tương thích ngược tuyệt đối với các caller hiện có.
+- Xuất sao kê giao dịch bất đồng bộ (Asynchronous Statement Exporter):
+  - Model `StatementJob` lưu trữ trạng thái PENDING/PROCESSING/COMPLETED/FAILED, định dạng `XLSX`, `PDF`, `CSV`, liên kết `User` và `Wallet`.
+  - Endpoint `POST /api/v1/statements/export` nhận yêu cầu, đẩy payload vào hàng đợi BullMQ `finwise-statement-export` (hoặc xử lý fallback direct khi Redis tắt) và trả về ngay HTTP 202 Accepted.
+  - Worker trích xuất dữ liệu bằng Cursor-based pagination (`findBatchForExport` trên `TransactionRepository`) đảm bảo RAM O(1) theo từng batch (mặc định 500 bản ghi).
+  - Excel (.xlsx) gồm 4 sheet chuyên biệt (Tổng quan dòng tiền, Bảng kê chi tiết, Phân bổ danh mục, Số dư lũy kế theo ngày) và hỗ trợ khóa bảo vệ trang tính (Sheet Protection) chống sửa đổi.
+  - PDF (.pdf) tuân thủ tiêu chuẩn ngân hàng: Watermark bảo mật xoay 45° (lineBreak: false), bảng kê zebra striping, logo FinWise, mã QR xác thực tính hợp lệ dẫn tới `/api/v1/statements/verify/:code`.
+  - CSV (.csv) tuân thủ RFC 4180 và đính kèm UTF-8 BOM (`\uFEFF`) để hiển thị đúng tiếng Việt có dấu trên Microsoft Excel Windows.
+  - Tệp kết xuất được lưu trữ riêng tư trên Cloudflare R2 (prefix `statements/<userId>/<jobId>.<ext>`) và cấp Presigned GET URL thời hạn 48 giờ.
+  - Tự động phát thông báo In-app và tin nhắn Zalo Bot (`ZaloBotService`) khi tệp hoàn tất.
+  - Tải file bảo mật qua `/api/v1/statements/jobs/:id/download` (và alias `/download/:id`), bảo vệ bằng quyền `STATEMENT_READ`, kiểm tra ownership chống IDOR, kiểm tra trạng thái COMPLETED và hạn sử dụng; tự động redirect 302 đến presigned URL nếu dùng Cloudflare R2 hoặc stream tệp trực tiếp từ local storage.
+  - Quyền hạn kiểm soát: `STATEMENT_EXPORT` cho khởi tạo xuất file, `STATEMENT_READ` cho xem lịch sử, chi tiết job và tải file. Endpoint xác thực QR `/api/v1/statements/verify/:code` là public và tự động che tên người dùng (masking).
 
 ## Trạng thái đã biết
 

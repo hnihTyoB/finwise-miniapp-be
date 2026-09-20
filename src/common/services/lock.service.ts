@@ -1,4 +1,4 @@
-import crypto from 'crypto';
+import { uuidv7 } from '../helpers/uuid.helper';
 import { cacheService } from './cache.service';
 import { LoggerService } from './logger.service';
 
@@ -19,7 +19,7 @@ export class LockService {
    * @returns lock token string if acquired successfully, null otherwise
    */
   async acquire(lockKey: string, ttlMs: number, customToken?: string): Promise<string | null> {
-    const token = customToken || crypto.randomUUID();
+    const token = customToken || uuidv7();
     const isUsingRedis = cacheService.isUsingRedis();
     const redisClient = cacheService.getRedisClient();
 

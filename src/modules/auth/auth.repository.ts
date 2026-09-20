@@ -104,6 +104,18 @@ export class AuthRepository {
     });
   }
 
+  async findUserSocial(userId: string, provider: string) {
+    return prisma.userSocial.findFirst({
+      where: { userId, provider },
+    });
+  }
+
+  async unlinkSocialAccount(userId: string, provider: string) {
+    return prisma.userSocial.deleteMany({
+      where: { userId, provider },
+    });
+  }
+
   async createVerificationToken(userId: string, token: string, expiresAt: Date) {
     return prisma.verificationToken.create({
       data: {

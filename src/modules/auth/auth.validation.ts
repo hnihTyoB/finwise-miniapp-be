@@ -33,6 +33,14 @@ export const zaloLoginSchema = z
     path: ['accessToken'],
   });
 
+export const zaloLinkSchema = z.object({
+  accessToken: z.string().min(1, 'Zalo access token is required'),
+  zaloId: z.string().optional(),
+  name: z.string().optional(),
+  avatar: z.string().optional(),
+});
+
+
 export const refreshSchema = z.object({
   refreshToken: z.string().optional(),
 });

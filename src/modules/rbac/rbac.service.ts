@@ -9,7 +9,6 @@ import {
   UpdateRoleDto,
   RoleQueryDto,
   PermissionQueryDto,
-  AuditLogQueryDto,
 } from './rbac.dto';
 
 const CACHE_TTL_SECONDS = 300; // 5 minutes
@@ -409,14 +408,6 @@ export class RbacService {
   async invalidateUserCache(userId: string): Promise<void> {
     await cacheService.del(`finwise:rbac:user:${userId}:permissions`);
     await cacheService.del(`finwise:user:status:${userId}`);
-  }
-
-  // ==========================================
-  // AUDIT LOGS
-  // ==========================================
-
-  async findAllAuditLogs(query: AuditLogQueryDto) {
-    return this.repository.findAllAuditLogs(query);
   }
 }
 

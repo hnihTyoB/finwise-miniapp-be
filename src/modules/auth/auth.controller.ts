@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthService } from './auth.service';
-import { LoginDto, ZaloLoginDto, RegisterDto, UpdateProfileDto, UpdateAvatarDto, UpdatePasswordDto, ForgotPasswordDto, ResetPasswordDto, ResendVerificationDto, SessionQueryDto } from './auth.dto';
+import { LoginDto, ZaloLoginDto, ZaloLinkDto, RegisterDto, UpdateProfileDto, UpdateAvatarDto, UpdatePasswordDto, ForgotPasswordDto, ResetPasswordDto, ResendVerificationDto, SessionQueryDto } from './auth.dto';
 import { AppError } from '../../common/errors/app-error';
 import { ERROR_CODE } from '../../common/errors/error-code';
 
@@ -318,6 +318,33 @@ export class AuthController {
           accessToken: result.accessToken,
           refreshToken: result.refreshToken,
         },
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  linkZaloAccount = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = req.body as ZaloLinkDto;
+      const result = await this.service.linkZaloAccount(req.user.id, body);
+      res.json({
+        success: true,
+        message: 'Zalo account linked successfully',
+        data: result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  unlinkZaloAccount = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await this.service.unlinkZaloAccount(req.user.id);
+      res.json({
+        success: true,
+        message: 'Zalo account unlinked successfully',
+        data: result,
       });
     } catch (error) {
       next(error);

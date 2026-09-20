@@ -12,7 +12,6 @@ import {
   rolePermissionParamsSchema,
   assignRolePermissionsSchema,
   permissionQuerySchema,
-  auditLogQuerySchema,
 } from './rbac.validation';
 
 const controller = new RbacController();
@@ -108,17 +107,4 @@ permissionsRouter.get(
   requirePermission(PERMISSIONS.PERMISSION_READ),
   validate(permissionQuerySchema, 'query'),
   controller.findAllPermissions
-);
-
-// ==========================================
-// AUDIT LOGS ROUTES (/api/v1/audit-logs)
-// ==========================================
-export const auditLogsRouter = Router();
-
-auditLogsRouter.get(
-  '/',
-  authMiddleware,
-  requirePermission(PERMISSIONS.AUDIT_LOG_READ),
-  validate(auditLogQuerySchema, 'query'),
-  controller.findAllAuditLogs
 );

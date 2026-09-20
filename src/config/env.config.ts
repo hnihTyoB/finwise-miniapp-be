@@ -180,35 +180,47 @@ export const envConfig = {
   redis: {
     url: process.env.REDIS_URL || '',
     host: (() => {
-      if (process.env.REDIS_HOST) return process.env.REDIS_HOST;
       if (process.env.REDIS_URL) {
         try {
           return new URL(process.env.REDIS_URL).hostname || 'localhost';
         } catch {
-          return 'localhost';
+          // fallback
         }
       }
+      if (process.env.REDIS_HOST) return process.env.REDIS_HOST;
       return 'localhost';
     })(),
     port: (() => {
-      if (process.env.REDIS_PORT) return parseInt(process.env.REDIS_PORT, 10);
       if (process.env.REDIS_URL) {
         try {
           const p = new URL(process.env.REDIS_URL).port;
-          return p ? parseInt(p, 10) : 6379;
+          if (p) return parseInt(p, 10);
         } catch {
-          return 6379;
+          // fallback
         }
       }
+      if (process.env.REDIS_PORT) return parseInt(process.env.REDIS_PORT, 10);
       return 6379;
     })(),
     password: (() => {
-      if (process.env.REDIS_PASSWORD) return process.env.REDIS_PASSWORD;
       if (process.env.REDIS_URL) {
         try {
-          return new URL(process.env.REDIS_URL).password || undefined;
+          const pass = new URL(process.env.REDIS_URL).password;
+          if (pass) return decodeURIComponent(pass);
         } catch {
-          return undefined;
+          // fallback
+        }
+      }
+      if (process.env.REDIS_PASSWORD) return process.env.REDIS_PASSWORD;
+      return undefined;
+    })(),
+    username: (() => {
+      if (process.env.REDIS_URL) {
+        try {
+          const user = new URL(process.env.REDIS_URL).username;
+          if (user) return decodeURIComponent(user);
+        } catch {
+          // fallback
         }
       }
       return undefined;
@@ -227,6 +239,49 @@ export const envConfig = {
     windowMs: (() => {
       const val = parseInt(process.env.API_KEY_RATE_LIMIT_WINDOW_MS || '60000', 10);
       return Number.isFinite(val) && val >= 1000 && val <= 3600000 ? val : 60000;
+    })(),
+  },
+  zaloBot: {
+    token: process.env.ZALO_BOT_TOKEN || '',
+    apiBaseUrl: 'https://bot-api.zaloplatforms.com',
+    secretToken: process.env.ZALO_BOT_SECRET_TOKEN || '',
+    webhookUrl: process.env.ZALO_BOT_WEBHOOK_URL || '',
+    botId: process.env.ZALO_BOT_ID || '3517263789471244097',
+    botUsername: process.env.ZALO_BOT_USERNAME || 'bot.uGsxQaGt',
+    botDisplayName: process.env.ZALO_BOT_DISPLAY_NAME || 'Bot Finwise',
+    botDeepLinkUrl: process.env.ZALO_BOT_DEEP_LINK_URL || 'https://bot.zaloplatforms.com/bots/3517263789471244097',
+    linkCodeTtlSeconds: (() => {
+      const val = parseInt(process.env.ZALO_BOT_LINK_CODE_TTL_SECONDS || '600', 10);
+      return Number.isFinite(val) && val >= 60 && val <= 3600 ? val : 600;
+    })(),
+    requestTimeoutMs: (() => {
+      const val = parseInt(process.env.ZALO_BOT_REQUEST_TIMEOUT_MS || '8000', 10);
+      return Number.isFinite(val) && val >= 1000 && val <= 30000 ? val : 8000;
+    })(),
+  },
+  auditLogs: {
+    retentionDays: (() => {
+      const val = parseInt(process.env.AUDIT_LOG_RETENTION_DAYS || '30', 10);
+      return Number.isFinite(val) && val >= 1 ? val : 30;
+    })(),
+    archiveDir: process.env.AUDIT_LOG_ARCHIVE_DIR || 'storage/archives/audit-logs',
+    cleanupIntervalMs: (() => {
+      const val = parseInt(process.env.AUDIT_LOG_CLEANUP_INTERVAL_MS || '86400000', 10);
+      return Number.isFinite(val) && val >= 60000 ? val : 86400000;
+    })(),
+  },
+  statementExport: {
+    batchSize: (() => {
+      const val = parseInt(process.env.STATEMENT_EXPORT_BATCH_SIZE || '500', 10);
+      return Number.isFinite(val) && val >= 50 && val <= 2000 ? val : 500;
+    })(),
+    concurrency: (() => {
+      const val = parseInt(process.env.STATEMENT_EXPORT_CONCURRENCY || '2', 10);
+      return Number.isFinite(val) && val >= 1 && val <= 10 ? val : 2;
+    })(),
+    expiryHours: (() => {
+      const val = parseInt(process.env.STATEMENT_EXPORT_EXPIRY_HOURS || '48', 10);
+      return Number.isFinite(val) && val >= 1 && val <= 168 ? val : 48;
     })(),
   },
 };

@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { uuidv7 } from '../../common/helpers/uuid.helper';
 import { PutObjectCommand, DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { AppError } from '../../common/errors/app-error';
@@ -40,7 +40,7 @@ export class UploadService {
     }
 
     const extension = EXTENSION_BY_CONTENT_TYPE[data.contentType];
-    const objectKey = `avatars/${userId}/${randomUUID()}.${extension}`;
+    const objectKey = `avatars/${userId}/${uuidv7()}.${extension}`;
     const client = new S3Client({
       region: 'auto',
       endpoint: `https://${config.accountId}.r2.cloudflarestorage.com`,

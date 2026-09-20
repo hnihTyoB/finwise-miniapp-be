@@ -15,6 +15,8 @@ export interface NotificationQueryDto {
 
 export interface UpdateNotificationSettingDto {
   channels?: NotificationChannel[];
+  /** chat_id nhận được khi user nhắn tin cho Zalo Bot. null = bỏ liên kết. */
+  zaloBotChatId?: string | null;
   budgetAlertsEnabled?: boolean;
   savingGoalAlertsEnabled?: boolean;
   reminderAlertsEnabled?: boolean;
@@ -37,6 +39,8 @@ export interface CreateNotificationInput {
 
 export interface NotificationSettingDto {
   channels: NotificationChannel[];
+  /** chat_id của Zalo Bot, null nếu chưa liên kết. */
+  zaloBotChatId: string | null;
   budgetAlertsEnabled: boolean;
   savingGoalAlertsEnabled: boolean;
   reminderAlertsEnabled: boolean;
@@ -45,6 +49,7 @@ export interface NotificationSettingDto {
 
 export const DEFAULT_NOTIFICATION_SETTING: NotificationSettingDto = {
   channels: [NotificationChannel.IN_APP],
+  zaloBotChatId: null,
   budgetAlertsEnabled: true,
   savingGoalAlertsEnabled: true,
   reminderAlertsEnabled: true,

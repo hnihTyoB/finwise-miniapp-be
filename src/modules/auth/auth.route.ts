@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { AuthController } from './auth.controller';
 import { authMiddleware } from '../../middlewares/auth.middleware';
 import { validate } from '../../middlewares/validate.middleware';
-import { loginSchema, zaloLoginSchema, refreshSchema, logoutSchema, registerSchema, verifyEmailSchema, updateProfileSchema, updateAvatarSchema, updatePasswordSchema, forgotPasswordSchema, resetPasswordSchema, resendVerificationSchema, sessionParamsSchema, sessionQuerySchema, revokeOtherSessionsSchema } from './auth.validation';
+import { loginSchema, zaloLoginSchema, zaloLinkSchema, refreshSchema, logoutSchema, registerSchema, verifyEmailSchema, updateProfileSchema, updateAvatarSchema, updatePasswordSchema, forgotPasswordSchema, resetPasswordSchema, resendVerificationSchema, sessionParamsSchema, sessionQuerySchema, revokeOtherSessionsSchema } from './auth.validation';
 
 const router = Router();
 const controller = new AuthController();
@@ -26,5 +26,9 @@ router.post('/resend-verification', validate(resendVerificationSchema), controll
 router.get('/sessions', authMiddleware, validate(sessionQuerySchema, 'query'), controller.getSessions);
 router.delete('/sessions/:id', authMiddleware, validate(sessionParamsSchema, 'params'), controller.revokeSession);
 router.delete('/sessions', authMiddleware, validate(revokeOtherSessionsSchema), controller.revokeOtherSessions);
+
+// Zalo account linking (requires authentication — policy 6.5)
+router.post('/zalo-link', authMiddleware, validate(zaloLinkSchema), controller.linkZaloAccount);
+router.delete('/zalo-link', authMiddleware, controller.unlinkZaloAccount);
 
 export default router;

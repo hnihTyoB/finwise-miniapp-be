@@ -6,6 +6,9 @@ storage/exports/*
 !storage/exports/.gitkeep
 storage/receipts/*
 !storage/receipts/.gitkeep
+storage/archives/*
+!storage/archives/.gitkeep
+!storage/archives/audit-logs/.gitkeep
 .DS_Store
 .agents/local.md
 .wrangler/

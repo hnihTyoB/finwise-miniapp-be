@@ -1332,6 +1332,13 @@ export const swaggerSpec = {
               enum: ['IN_APP', 'EMAIL', 'ZALO', 'PUSH'],
             },
           },
+          zaloBotChatId: {
+            type: 'string',
+            nullable: true,
+            maxLength: 100,
+            example: 'dbcb8889dbdc32826bcd',
+            description: 'Chat ID Zalo Bot cá nhân để nhận thông báo cảnh báo trực tiếp',
+          },
           budgetAlertsEnabled: { type: 'boolean' },
           savingGoalAlertsEnabled: { type: 'boolean' },
           reminderAlertsEnabled: { type: 'boolean' },
@@ -1351,6 +1358,13 @@ export const swaggerSpec = {
               type: 'string',
               enum: ['IN_APP', 'EMAIL', 'ZALO', 'PUSH'],
             },
+          },
+          zaloBotChatId: {
+            type: 'string',
+            nullable: true,
+            maxLength: 100,
+            example: 'dbcb8889dbdc32826bcd',
+            description: 'Chat ID Zalo Bot; truyền null để hủy liên kết',
           },
           budgetAlertsEnabled: { type: 'boolean' },
           savingGoalAlertsEnabled: { type: 'boolean' },
@@ -2281,6 +2295,85 @@ export const swaggerSpec = {
           },
         ],
       },
+      ZaloWebhookPayload: {
+        type: 'object',
+        properties: {
+          ok: { type: 'boolean', example: true },
+          result: {
+            type: 'object',
+            properties: {
+              event_name: { type: 'string', example: 'message.text.received' },
+              message: {
+                type: 'object',
+                properties: {
+                  from: {
+                    type: 'object',
+                    properties: {
+                      id: { type: 'string', example: 'dbcb8889dbdc32826bcd' },
+                      display_name: { type: 'string', example: 'Thịnh' },
+                    },
+                  },
+                  chat: {
+                    type: 'object',
+                    properties: {
+                      id: { type: 'string', example: 'dbcb8889dbdc32826bcd' },
+                      chat_type: { type: 'string', example: 'PRIVATE' },
+                    },
+                  },
+                  text: { type: 'string', example: '/link FW-8492' },
+                  message_id: { type: 'string', example: '2d758cb5e222177a4e35' },
+                  date: { type: 'integer', example: 1750316131602 },
+                },
+              },
+            },
+          },
+        },
+      },
+      ZaloLinkCodeData: {
+        type: 'object',
+        properties: {
+          linkCode: { type: 'string', example: 'FW-8492' },
+          expiresInSeconds: { type: 'integer', example: 600 },
+          botUsername: { type: 'string', example: 'bot.uGsxQaGt' },
+          botDisplayName: { type: 'string', example: 'Bot Finwise' },
+          deepLinkUrl: { type: 'string', example: 'https://zalo.me/bot.uGsxQaGt' },
+          instruction: { type: 'string', example: 'Nhắn "FW-8492" cho Bot Finwise để hoàn tất liên kết.' },
+        },
+      },
+      ZaloLinkCodeResponse: {
+        allOf: [
+          { $ref: '#/components/schemas/SuccessResponse' },
+          {
+            type: 'object',
+            properties: {
+              data: { $ref: '#/components/schemas/ZaloLinkCodeData' },
+            },
+          },
+        ],
+      },
+      ZaloLinkStatusData: {
+        type: 'object',
+        properties: {
+          linked: { type: 'boolean', example: true },
+          zaloBotChatId: { type: 'string', nullable: true, example: 'dbcb8889dbdc32826bcd' },
+          channels: {
+            type: 'array',
+            items: { type: 'string' },
+            example: ['IN_APP', 'ZALO'],
+          },
+        },
+      },
+      ZaloLinkStatusResponse: {
+        allOf: [
+          { $ref: '#/components/schemas/SuccessResponse' },
+          {
+            type: 'object',
+            properties: {
+              data: { $ref: '#/components/schemas/ZaloLinkStatusData' },
+            },
+          },
+        ],
+      },
     },
     parameters: {
       PageParam: { in: 'query', name: 'page', schema: { type: 'integer', default: 1 } },
@@ -2434,6 +2527,10 @@ export const swaggerSpec = {
     {
       name: 'AI Financial Assistant',
       description: 'Gemini-backed categorization, receipt extraction, financial Q&A, insights, and recommendations',
+    },
+    {
+      name: 'Zalo Bot',
+      description: 'Tích hợp Zalo Bot hai chiều (Webhook, liên kết 1 chạm không cần Chat ID, tra cứu tài chính)',
     },
   ],
   paths: {
@@ -5082,6 +5179,116 @@ export const swaggerSpec = {
           401: { $ref: '#/components/responses/Unauthorized' },
           404: { $ref: '#/components/responses/NotFound' },
           422: { $ref: '#/components/responses/Validation' },
+        },
+      },
+    },
+    '/zalo-bot/webhook': {
+      post: {
+        tags: ['Zalo Bot'],
+        summary: 'Zalo Bot Webhook receiver',
+        description: 'Endpoint nhận sự kiện webhook từ Zalo Bot Platform (yêu cầu header X-Bot-Api-Secret-Token).',
+        parameters: [
+          {
+            in: 'header',
+            name: 'X-Bot-Api-Secret-Token',
+            required: true,
+            schema: { type: 'string' },
+            description: 'Khóa bí mật do FinWise đăng ký với Zalo qua setWebhook',
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ZaloWebhookPayload' },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Sự kiện đã được tiếp nhận thành công',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    ok: { type: 'boolean', example: true },
+                  },
+                },
+              },
+            },
+          },
+          403: {
+            description: 'Sai hoặc thiếu X-Bot-Api-Secret-Token',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    ok: { type: 'boolean', example: false },
+                    message: { type: 'string', example: 'Invalid secret token' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/zalo-bot/link-code': {
+      post: {
+        tags: ['Zalo Bot'],
+        summary: 'Tạo mã liên kết 1 chạm với Zalo Bot',
+        description: 'Sinh mã ngẫu nhiên dạng FW-XXXX (TTL 10 phút) để người dùng gửi cho bot trên Zalo.',
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: {
+            description: 'Mã liên kết đã được sinh thành công',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ZaloLinkCodeResponse' },
+              },
+            },
+          },
+          401: { $ref: '#/components/responses/Unauthorized' },
+        },
+      },
+    },
+    '/zalo-bot/link-status': {
+      get: {
+        tags: ['Zalo Bot'],
+        summary: 'Kiểm tra trạng thái liên kết Zalo Bot',
+        description: 'Lấy thông tin trạng thái liên kết Zalo Bot của tài khoản đang đăng nhập.',
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: {
+            description: 'Trạng thái liên kết',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ZaloLinkStatusResponse' },
+              },
+            },
+          },
+          401: { $ref: '#/components/responses/Unauthorized' },
+        },
+      },
+    },
+    '/zalo-bot/unlink': {
+      post: {
+        tags: ['Zalo Bot'],
+        summary: 'Hủy liên kết Zalo Bot',
+        description: 'Hủy liên kết Zalo Bot và tắt kênh ZALO cho tài khoản đang đăng nhập.',
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: {
+            description: 'Đã hủy liên kết thành công',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/SuccessResponse' },
+              },
+            },
+          },
+          401: { $ref: '#/components/responses/Unauthorized' },
         },
       },
     },
