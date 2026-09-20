@@ -33,6 +33,7 @@ import webhookRoute from '../modules/webhooks/webhook.route';
 import jobRoute from '../modules/jobs/job.route';
 import zaloBotRoute from '../modules/zalo-bot/zalo-bot.route';
 import queryRoute from '../modules/query/query.route';
+import statementRoute from '../modules/statements/statement.route';
 
 const router = Router();
 
@@ -71,6 +72,6 @@ router.use('/notifications', notificationRoute);
 router.use('/reminders', reminderRoute);
 router.use('/ai-assistant', aiAssistantRoute);
 router.use('/uploads', uploadRoute);
+router.use('/statements', statementRoute);
 
 export default router;
-

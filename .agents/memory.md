@@ -109,6 +109,17 @@ File này chỉ lưu sự thật và quyết định dài hạn giúp các phiê
 - Quét subscription định kỳ và tính toán ngày nghiệp vụ sử dụng thống nhất hàm `instantToBusinessDate()` (`Asia/Ho_Chi_Minh` UTC+7) từ `business-time.ts`.
 - Tự động lưu trữ và dọn dẹp Nhật ký kiểm toán (Audit Log Archiving & Retention): Tích hợp tác vụ định kỳ 24h trong worker nền (`notification.worker.ts`) bảo vệ bởi distributed lock (`LockService`). Mặc định lưu trữ 30 ngày (cấu hình qua SystemSetting `security.audit_log_retention_days`). Trước khi xóa các bản ghi cũ khỏi DB, toàn bộ dữ liệu được nén thành file Gzip (`.json.gz`) lưu trữ tại `storage/archives/audit-logs/` (và tự động upload lên Cloudflare R2 nếu có cấu hình). Hành động dọn dẹp tự động ghi nhận 1 bản ghi kiểm toán `AUDIT_LOGS_ARCHIVE_CLEANUP` lưu metadata đợt dọn dẹp. Cung cấp API `POST /api/v1/audit-logs/archive-cleanup` bảo vệ bởi quyền `AUDIT_LOG_READ` cho quản trị viên kích hoạt thủ công.
 - Module Nhật ký kiểm toán (`src/modules/audit-logs/`) được tách biệt hoàn toàn khỏi `rbac`, gồm đầy đủ các tầng `audit-log.dto`, `audit-log.validation`, `audit-log.repository`, `audit-log.service`, `audit-log-archive.service`, `audit-log.controller`, `audit-log.route`. Mount tại `/api/v1/audit-logs`. `rbacRepository` giữ các hàm uỷ quyền (delegation) `createAuditLog` và `findAllAuditLogs` để đảm bảo tính tương thích ngược tuyệt đối với các caller hiện có.
+- Xuất sao kê giao dịch bất đồng bộ (Asynchronous Statement Exporter):
+  - Model `StatementJob` lưu trữ trạng thái PENDING/PROCESSING/COMPLETED/FAILED, định dạng `XLSX`, `PDF`, `CSV`, liên kết `User` và `Wallet`.
+  - Endpoint `POST /api/v1/statements/export` nhận yêu cầu, đẩy payload vào hàng đợi BullMQ `finwise-statement-export` (hoặc xử lý fallback direct khi Redis tắt) và trả về ngay HTTP 202 Accepted.
+  - Worker trích xuất dữ liệu bằng Cursor-based pagination (`findBatchForExport` trên `TransactionRepository`) đảm bảo RAM O(1) theo từng batch (mặc định 500 bản ghi).
+  - Excel (.xlsx) gồm 4 sheet chuyên biệt (Tổng quan dòng tiền, Bảng kê chi tiết, Phân bổ danh mục, Số dư lũy kế theo ngày) và hỗ trợ khóa bảo vệ trang tính (Sheet Protection) chống sửa đổi.
+  - PDF (.pdf) tuân thủ tiêu chuẩn ngân hàng: Watermark bảo mật xoay 45° (lineBreak: false), bảng kê zebra striping, logo FinWise, mã QR xác thực tính hợp lệ dẫn tới `/api/v1/statements/verify/:code`.
+  - CSV (.csv) tuân thủ RFC 4180 và đính kèm UTF-8 BOM (`\uFEFF`) để hiển thị đúng tiếng Việt có dấu trên Microsoft Excel Windows.
+  - Tệp kết xuất được lưu trữ riêng tư trên Cloudflare R2 (prefix `statements/<userId>/<jobId>.<ext>`) và cấp Presigned GET URL thời hạn 48 giờ.
+  - Tự động phát thông báo In-app và tin nhắn Zalo Bot (`ZaloBotService`) khi tệp hoàn tất.
+  - Tải file bảo mật qua `/api/v1/statements/jobs/:id/download` (và alias `/download/:id`), bảo vệ bằng quyền `STATEMENT_READ`, kiểm tra ownership chống IDOR, kiểm tra trạng thái COMPLETED và hạn sử dụng; tự động redirect 302 đến presigned URL nếu dùng Cloudflare R2 hoặc stream tệp trực tiếp từ local storage.
+  - Quyền hạn kiểm soát: `STATEMENT_EXPORT` cho khởi tạo xuất file, `STATEMENT_READ` cho xem lịch sử, chi tiết job và tải file. Endpoint xác thực QR `/api/v1/statements/verify/:code` là public và tự động che tên người dùng (masking).
 
 ## Trạng thái đã biết
 

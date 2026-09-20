@@ -151,6 +151,9 @@ async function main() {
     // ASYNC_JOB
     { name: 'JOB_READ', resource: 'JOB', action: 'READ', description: 'Xem trạng thái và kết quả Async Job', isSystem: true },
     { name: 'JOB_CREATE', resource: 'JOB', action: 'CREATE', description: 'Khởi tạo Async Job xử lý nền', isSystem: true },
+    // STATEMENT_EXPORT
+    { name: 'STATEMENT_READ', resource: 'STATEMENT', action: 'READ', description: 'Xem danh sách và tải sao kê giao dịch', isSystem: true },
+    { name: 'STATEMENT_EXPORT', resource: 'STATEMENT', action: 'EXPORT', description: 'Khởi tạo xuất sao kê giao dịch bất đồng bộ', isSystem: true },
   ];
 
   const permissionMap: Record<string, string> = {};
