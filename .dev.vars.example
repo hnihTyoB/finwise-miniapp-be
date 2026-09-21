@@ -1,0 +1,6 @@
+# Cloudflare Workers Local Environment Variables (.dev.vars)
+# Sao chép file này thành .dev.vars để chạy cục bộ với `wrangler dev`
+# Không bao giờ commit file .dev.vars chứa mật khẩu thật lên Git repository
+
+# Chuỗi kết nối Postgres local cho Hyperdrive (thay thế mật khẩu và thông tin kết nối thực tế)
+CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE="postgresql://postgres.[PROJECT_REF]:[YOUR_PASSWORD]@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres"
