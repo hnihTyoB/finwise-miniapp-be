@@ -34,6 +34,8 @@ import jobRoute from '../modules/jobs/job.route';
 import zaloBotRoute from '../modules/zalo-bot/zalo-bot.route';
 import queryRoute from '../modules/query/query.route';
 import statementRoute from '../modules/statements/statement.route';
+import backupRoute from '../modules/backup/backup.route';
+import handoverRoute from '../modules/handover/handover.route';
 
 const router = Router();
 
@@ -73,5 +75,7 @@ router.use('/reminders', reminderRoute);
 router.use('/ai-assistant', aiAssistantRoute);
 router.use('/uploads', uploadRoute);
 router.use('/statements', statementRoute);
+router.use('/backup', backupRoute);
+router.use('/handover', handoverRoute);
 
 export default router;
