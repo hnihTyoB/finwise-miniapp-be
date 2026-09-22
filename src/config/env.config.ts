@@ -270,4 +270,18 @@ export const envConfig = {
       return Number.isFinite(val) && val >= 60000 ? val : 86400000;
     })(),
   },
+  statementExport: {
+    batchSize: (() => {
+      const val = parseInt(process.env.STATEMENT_EXPORT_BATCH_SIZE || '500', 10);
+      return Number.isFinite(val) && val >= 50 && val <= 2000 ? val : 500;
+    })(),
+    concurrency: (() => {
+      const val = parseInt(process.env.STATEMENT_EXPORT_CONCURRENCY || '2', 10);
+      return Number.isFinite(val) && val >= 1 && val <= 10 ? val : 2;
+    })(),
+    expiryHours: (() => {
+      const val = parseInt(process.env.STATEMENT_EXPORT_EXPIRY_HOURS || '48', 10);
+      return Number.isFinite(val) && val >= 1 && val <= 168 ? val : 48;
+    })(),
+  },
 };

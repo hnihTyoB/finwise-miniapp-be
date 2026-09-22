@@ -139,6 +139,7 @@ model User {
   apiKeys                       ApiKey[]
   webhookEndpoints              WebhookEndpoint[]
   asyncJobs                     AsyncJob[]
+  statementJobs                 StatementJob[]
 
   @@index([roleId])
   @@index([deletedAt, isActive])
@@ -226,6 +227,7 @@ model Wallet {
   outgoingTransfers             Transfer[]                     @relation("TransferSourceWallet")
   incomingTransfers             Transfer[]                     @relation("TransferDestinationWallet")
   recurringTransactionSchedules RecurringTransactionSchedule[]
+  statementJobs                 StatementJob[]
 
   @@unique([userId, name])
   @@index([userId, isArchived])
@@ -804,3 +806,47 @@ model AsyncJob {
   @@map("async_jobs")
 }
 
+enum StatementExportFormat {
+  XLSX
+  PDF
+  CSV
+}
+
+enum StatementJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model StatementJob {
+  id                  String                @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  userId              String                @map("user_id") @db.Uuid
+  walletId            String?               @map("wallet_id") @db.Uuid
+  format              StatementExportFormat
+  status              StatementJobStatus    @default(PENDING)
+  dateFrom            DateTime              @map("date_from") @db.Date
+  dateTo              DateTime              @map("date_to") @db.Date
+  isPasswordProtected Boolean               @default(false) @map("is_password_protected")
+  passwordHint        String?               @map("password_hint") @db.VarChar(100)
+  fileUrl             String?               @map("file_url") @db.Text
+  fileKey             String?               @map("file_key") @db.VarChar(512)
+  fileSize            Int?                  @map("file_size")
+  recordCount         Int?                  @map("record_count")
+  verificationCode    String                @unique @map("verification_code") @db.VarChar(64)
+  error               String?               @db.Text
+  expiresAt           DateTime?             @map("expires_at") @db.Timestamptz(3)
+  startedAt           DateTime?             @map("started_at") @db.Timestamptz(3)
+  completedAt         DateTime?             @map("completed_at") @db.Timestamptz(3)
+  createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wallet Wallet? @relation(fields: [walletId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status, createdAt])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([verificationCode])
+  @@index([expiresAt])
+  @@map("statement_jobs")
+}

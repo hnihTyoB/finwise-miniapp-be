@@ -126,6 +126,10 @@ export const PERMISSIONS = {
   // ASYNC JOB
   JOB_READ: 'JOB_READ',
   JOB_CREATE: 'JOB_CREATE',
+
+  // STATEMENT EXPORT
+  STATEMENT_READ: 'STATEMENT_READ',
+  STATEMENT_EXPORT: 'STATEMENT_EXPORT',
 } as const;
 
 export type PermissionName = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

@@ -305,4 +305,60 @@ export class TransactionRepository {
       };
     });
   }
+
+  /**
+   * Trích xuất giao dịch theo batch bằng cursor-based pagination để xuất sao kê,
+   * đảm bảo RAM không tăng tỷ lệ với tổng số bản ghi (complexity O(1) per batch).
+   */
+  async findBatchForExport(opts: {
+    userId: string;
+    walletId?: string;
+    dateFrom: Date;
+    dateTo: Date;
+    cursor?: { date: Date; id: string };
+    batchSize: number;
+  }) {
+    const where: Prisma.TransactionWhereInput = {
+      userId: opts.userId,
+      ...(opts.walletId ? { walletId: opts.walletId } : {}),
+      date: {
+        gte: opts.dateFrom,
+        lt: opts.dateTo,
+      },
+      ...(opts.cursor
+        ? {
+          OR: [
+            { date: { gt: opts.cursor.date } },
+            { date: opts.cursor.date, id: { gt: opts.cursor.id } },
+          ],
+        }
+        : {}),
+    };
+
+    const records = await prisma.transaction.findMany({
+      where,
+      select: {
+        id: true,
+        walletId: true,
+        categoryId: true,
+        amount: true,
+        type: true,
+        description: true,
+        location: true,
+        date: true,
+        createdAt: true,
+        wallet: { select: { id: true, name: true, currency: true } },
+        category: { select: { id: true, name: true, type: true, icon: true, color: true } },
+      },
+      orderBy: [{ date: 'asc' }, { id: 'asc' }],
+      take: opts.batchSize,
+    });
+
+    const nextCursor =
+      records.length === opts.batchSize
+        ? { date: records[records.length - 1].date, id: records[records.length - 1].id }
+        : null;
+
+    return { records, nextCursor };
+  }
 }
