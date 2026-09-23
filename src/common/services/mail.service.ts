@@ -12,20 +12,34 @@ export class MailService {
   private transporter: nodemailer.Transporter;
 
   constructor() {
-    this.transporter = nodemailer.createTransport({
-      host: mailConfig.host,
-      port: mailConfig.port,
-      secure: mailConfig.secure,
-      family: 4, // Force IPv4 to prevent ENETUNREACH on environments without IPv6 routing
-      auth: {
-        user: mailConfig.auth.user,
-        pass: mailConfig.auth.pass,
-      },
-      // Explicit timeouts to prevent hanging indefinitely on cloud platforms (e.g. Render)
-      connectionTimeout: 5000,
-      greetingTimeout: 5000,
-      socketTimeout: 8000,
-    } as any);
+    const isGmail = mailConfig.host === 'smtp.gmail.com' || mailConfig.host.includes('gmail');
+    this.transporter = nodemailer.createTransport(
+      isGmail
+        ? ({
+            service: 'gmail',
+            auth: {
+              user: mailConfig.auth.user,
+              pass: mailConfig.auth.pass,
+            },
+            connectionTimeout: 10000,
+            greetingTimeout: 10000,
+            socketTimeout: 15000,
+          } as any)
+        : ({
+            host: mailConfig.host,
+            port: mailConfig.port,
+            secure: mailConfig.secure,
+            family: 4, // Force IPv4 to prevent ENETUNREACH on environments without IPv6 routing
+            auth: {
+              user: mailConfig.auth.user,
+              pass: mailConfig.auth.pass,
+            },
+            // Explicit timeouts to prevent hanging indefinitely on cloud platforms (e.g. Render)
+            connectionTimeout: 5000,
+            greetingTimeout: 5000,
+            socketTimeout: 8000,
+          } as any),
+    );
   }
 
   private async sendViaResend(options: SendMailOptions): Promise<void> {
@@ -334,8 +348,10 @@ export class MailService {
       return;
     }
 
+    console.log(`[MailService] Preparing to dispatch handover OTP email to: ${email}...`);
     try {
       await this.dispatchEmail(mailOptions);
+      console.log(`[MailService] Handover OTP email successfully dispatched to: ${email}`);
     } catch (error) {
       console.error('[MailService] Failed to send handover OTP email:', error);
       console.warn('-------- HANDOVER OTP FALLBACK LOG --------');

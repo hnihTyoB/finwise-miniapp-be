@@ -108,6 +108,10 @@ export class HandoverService {
 
     await this.repository.saveSession(session, this.HANDOVER_TTL_SECONDS);
 
+    console.log(
+      `[Handover] Initiated session ${handoverToken} for user ${userId} (email: ${user.email}, pin: ${pinCode})`,
+    );
+
     await this.repository.createAuditLog({
       actorId: userId,
       action: 'HANDOVER_INITIATED',
@@ -291,6 +295,9 @@ export class HandoverService {
 
     // Gửi email OTP xác nhận chuyển giao tới chủ tài khoản Máy A
     if (session.sourceUserEmail) {
+      console.log(
+        `[Handover] Target user "${session.targetUserName}" connected to session ${token}. Dispatching OTP to source user "${session.sourceUserEmail}"...`,
+      );
       await this.mailService.sendHandoverOtpEmail(
         session.sourceUserEmail,
         session.otpCode,
@@ -299,6 +306,10 @@ export class HandoverService {
           expiresInMinutes: Math.max(1, Math.round(remainingTtl / 60)),
         },
         session.sourceUserName,
+      );
+    } else {
+      console.warn(
+        `[Handover] Warning: Session ${token} has no sourceUserEmail (sourceUserId: ${session.sourceUserId}). Skipping email dispatch.`,
       );
     }
 
