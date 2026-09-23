@@ -66,12 +66,19 @@ export class MailService {
   private async dispatchEmail(options: SendMailOptions): Promise<void> {
     // If Resend API key is configured, send via HTTPS REST API (bypasses blocked SMTP ports on cloud hosts)
     if (mailConfig.resendApiKey) {
-      await this.sendViaResend(options);
-      return;
+      try {
+        await this.sendViaResend(options);
+        return;
+      } catch (resendError: any) {
+        console.warn(
+          `[MailService] Resend dispatch failed (${resendError.message}). Attempting fallback to direct SMTP...`,
+        );
+      }
     }
 
     // Otherwise use SMTP (nodemailer)
     if (!mailConfig.auth.user || !mailConfig.auth.pass) {
+      console.warn('[MailService] SMTP credentials not configured. Skipping email dispatch.');
       return;
     }
 
