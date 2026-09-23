@@ -1,5 +1,24 @@
+import dns from 'dns';
 import nodemailer from 'nodemailer';
 import { mailConfig } from '../../config/mail.config';
+
+// Force IPv4-first resolution in Node.js runtime to prevent ENETUNREACH on platforms without IPv6 routing (e.g. Render)
+try {
+  dns.setDefaultResultOrder?.('ipv4first');
+} catch {}
+
+// Prevent nodemailer from selecting IPv6 addresses when running in containers without public IPv6 routing
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const shared = require('nodemailer/lib/shared');
+  if (shared && shared.networkInterfaces) {
+    for (const key of Object.keys(shared.networkInterfaces)) {
+      shared.networkInterfaces[key] = shared.networkInterfaces[key].filter(
+        (i: any) => i.family !== 'IPv6' && i.family !== 6,
+      );
+    }
+  }
+} catch {}
 
 interface SendMailOptions {
   to: string;
@@ -12,37 +31,83 @@ export class MailService {
   private transporter: nodemailer.Transporter;
 
   constructor() {
-    const isGmail = mailConfig.host === 'smtp.gmail.com' || mailConfig.host.includes('gmail');
-    this.transporter = nodemailer.createTransport(
-      isGmail
-        ? ({
-            service: 'gmail',
-            auth: {
-              user: mailConfig.auth.user,
-              pass: mailConfig.auth.pass,
-            },
-            connectionTimeout: 10000,
-            greetingTimeout: 10000,
-            socketTimeout: 15000,
-          } as any)
-        : ({
-            host: mailConfig.host,
-            port: mailConfig.port,
-            secure: mailConfig.secure,
-            family: 4, // Force IPv4 to prevent ENETUNREACH on environments without IPv6 routing
-            auth: {
-              user: mailConfig.auth.user,
-              pass: mailConfig.auth.pass,
-            },
-            // Explicit timeouts to prevent hanging indefinitely on cloud platforms (e.g. Render)
-            connectionTimeout: 5000,
-            greetingTimeout: 5000,
-            socketTimeout: 8000,
-          } as any),
-    );
+    this.transporter = this.createTransporter(mailConfig.port || 587, mailConfig.secure);
+  }
+
+  private createTransporter(port: number, secure: boolean): nodemailer.Transporter {
+    return nodemailer.createTransport({
+      host: mailConfig.host || 'smtp.gmail.com',
+      port,
+      secure,
+      requireTLS: !secure,
+      family: 4, // Force IPv4 to prevent ENETUNREACH on environments without IPv6 routing
+      auth: {
+        user: mailConfig.auth.user,
+        pass: mailConfig.auth.pass,
+      },
+      tls: {
+        rejectUnauthorized: false,
+        servername: mailConfig.host || 'smtp.gmail.com',
+      },
+      // Fast timeout: on cloud environments (e.g. Render free tier) with blocked SMTP ports, fail quickly
+      connectionTimeout: 4000,
+      greetingTimeout: 4000,
+      socketTimeout: 5000,
+    } as any);
+  }
+
+  private async sendViaBrevo(options: SendMailOptions): Promise<void> {
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'api-key': mailConfig.brevoApiKey,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        sender: {
+          name: 'FinWise',
+          email: mailConfig.auth.user || 'nctmdt@gmail.com',
+        },
+        to: [{ email: options.to }],
+        subject: options.subject,
+        htmlContent: options.html,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`Brevo API HTTP ${response.status}: ${errorText}`);
+    }
+  }
+
+  private async sendViaWebhook(options: SendMailOptions): Promise<void> {
+    const response = await fetch(mailConfig.mailWebhookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`Mail Webhook HTTP ${response.status}: ${errorText}`);
+    }
   }
 
   private async sendViaResend(options: SendMailOptions): Promise<void> {
+    // When using Resend testing domain (without verified custom domain), from must use onboarding@resend.dev
+    const isCustomDomain =
+      mailConfig.from.includes('@') &&
+      !mailConfig.from.includes('gmail.com') &&
+      !mailConfig.from.includes('resend.dev');
+    const sender = isCustomDomain ? (options.from || mailConfig.from) : 'FinWise <onboarding@resend.dev>';
+
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
@@ -50,7 +115,7 @@ export class MailService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: options.from || mailConfig.from,
+        from: sender,
         to: [options.to],
         subject: options.subject,
         html: options.html,
@@ -64,30 +129,67 @@ export class MailService {
   }
 
   private async dispatchEmail(options: SendMailOptions): Promise<void> {
-    // If Resend API key is configured, send via HTTPS REST API (bypasses blocked SMTP ports on cloud hosts)
+    // 1. Try Brevo HTTPS REST API (Port 443 - Never blocked on Render free tier, sends to any recipient)
+    if (mailConfig.brevoApiKey) {
+      try {
+        await this.sendViaBrevo(options);
+        return;
+      } catch (brevoError: any) {
+        console.warn(`[MailService] Brevo dispatch failed (${brevoError.message}). Falling back...`);
+      }
+    }
+
+    // 2. Try Resend HTTPS REST API (Port 443 - Never blocked on Render free tier)
     if (mailConfig.resendApiKey) {
       try {
         await this.sendViaResend(options);
         return;
       } catch (resendError: any) {
-        console.warn(
-          `[MailService] Resend dispatch failed (${resendError.message}). Attempting fallback to direct SMTP...`,
-        );
+        console.warn(`[MailService] Resend dispatch failed (${resendError.message}). Falling back...`);
       }
     }
 
-    // Otherwise use SMTP (nodemailer)
+    // 3. Try custom HTTP Mail Webhook (e.g. Google Apps Script email relay over Port 443)
+    if (mailConfig.mailWebhookUrl) {
+      try {
+        await this.sendViaWebhook(options);
+        return;
+      } catch (webhookError: any) {
+        console.warn(`[MailService] Webhook dispatch failed (${webhookError.message}). Falling back...`);
+      }
+    }
+
+    // 4. Fallback to direct SMTP (Works on local dev and hosting without firewall restrictions on ports 587/465)
     if (!mailConfig.auth.user || !mailConfig.auth.pass) {
       console.warn('[MailService] SMTP credentials not configured. Skipping email dispatch.');
       return;
     }
 
-    await this.transporter.sendMail({
-      from: options.from || mailConfig.from,
-      to: options.to,
-      subject: options.subject,
-      html: options.html,
-    });
+    const primaryPort = mailConfig.port || 587;
+    const primarySecure = mailConfig.secure || primaryPort === 465;
+
+    try {
+      await this.transporter.sendMail({
+        from: options.from || mailConfig.from,
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+      });
+    } catch (smtpError: any) {
+      // If primary port was 587 and it failed with a connection error, retry on port 465 (or vice versa)
+      const altPort = primaryPort === 587 ? 465 : 587;
+      const altSecure = altPort === 465;
+      console.warn(
+        `[MailService] SMTP dispatch failed on port ${primaryPort} (${smtpError.message}). Retrying on alternative port ${altPort} over IPv4...`,
+      );
+      const fallbackTransporter = this.createTransporter(altPort, altSecure);
+      await fallbackTransporter.sendMail({
+        from: options.from || mailConfig.from,
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+      });
+    }
   }
 
   async sendVerificationEmail(email: string, token: string, fullName?: string) {
