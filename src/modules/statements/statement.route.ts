@@ -54,6 +54,14 @@ router.get(
   controller.downloadStatement,
 );
 
+// Route with filename in path so Zalo openDocument can detect file type by extension
+router.get(
+  '/jobs/:id/download/:filename',
+  requirePermission(PERMISSIONS.STATEMENT_READ),
+  validate(statementJobIdParamSchema, 'params'),
+  controller.downloadStatement,
+);
+
 router.get(
   '/download/:id',
   requirePermission(PERMISSIONS.STATEMENT_READ),
