@@ -23,7 +23,18 @@ export const mailConfig = {
   get resendApiKey(): string {
     return process.env.RESEND_API_KEY || '';
   },
+  get brevoApiKey(): string {
+    return process.env.BREVO_API_KEY || '';
+  },
+  get mailWebhookUrl(): string {
+    return process.env.MAIL_WEBHOOK_URL || '';
+  },
   get isConfigured(): boolean {
-    return Boolean(this.resendApiKey || (this.auth.user && this.auth.pass));
+    return Boolean(
+      this.resendApiKey ||
+        this.brevoApiKey ||
+        this.mailWebhookUrl ||
+        (this.auth.user && this.auth.pass),
+    );
   },
 };

@@ -49,13 +49,65 @@ export class MailService {
         rejectUnauthorized: false,
         servername: mailConfig.host || 'smtp.gmail.com',
       },
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 15000,
+      // Fast timeout: on cloud environments (e.g. Render free tier) with blocked SMTP ports, fail quickly
+      connectionTimeout: 4000,
+      greetingTimeout: 4000,
+      socketTimeout: 5000,
     } as any);
   }
 
+  private async sendViaBrevo(options: SendMailOptions): Promise<void> {
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'api-key': mailConfig.brevoApiKey,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        sender: {
+          name: 'FinWise',
+          email: mailConfig.auth.user || 'nctmdt@gmail.com',
+        },
+        to: [{ email: options.to }],
+        subject: options.subject,
+        htmlContent: options.html,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`Brevo API HTTP ${response.status}: ${errorText}`);
+    }
+  }
+
+  private async sendViaWebhook(options: SendMailOptions): Promise<void> {
+    const response = await fetch(mailConfig.mailWebhookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`Mail Webhook HTTP ${response.status}: ${errorText}`);
+    }
+  }
+
   private async sendViaResend(options: SendMailOptions): Promise<void> {
+    // When using Resend testing domain (without verified custom domain), from must use onboarding@resend.dev
+    const isCustomDomain =
+      mailConfig.from.includes('@') &&
+      !mailConfig.from.includes('gmail.com') &&
+      !mailConfig.from.includes('resend.dev');
+    const sender = isCustomDomain ? (options.from || mailConfig.from) : 'FinWise <onboarding@resend.dev>';
+
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
@@ -63,7 +115,7 @@ export class MailService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: options.from || mailConfig.from,
+        from: sender,
         to: [options.to],
         subject: options.subject,
         html: options.html,
@@ -77,19 +129,37 @@ export class MailService {
   }
 
   private async dispatchEmail(options: SendMailOptions): Promise<void> {
-    // If Resend API key is configured, send via HTTPS REST API (bypasses blocked SMTP ports on cloud hosts)
+    // 1. Try Brevo HTTPS REST API (Port 443 - Never blocked on Render free tier, sends to any recipient)
+    if (mailConfig.brevoApiKey) {
+      try {
+        await this.sendViaBrevo(options);
+        return;
+      } catch (brevoError: any) {
+        console.warn(`[MailService] Brevo dispatch failed (${brevoError.message}). Falling back...`);
+      }
+    }
+
+    // 2. Try Resend HTTPS REST API (Port 443 - Never blocked on Render free tier)
     if (mailConfig.resendApiKey) {
       try {
         await this.sendViaResend(options);
         return;
       } catch (resendError: any) {
-        console.warn(
-          `[MailService] Resend dispatch failed (${resendError.message}). Attempting fallback to direct SMTP...`,
-        );
+        console.warn(`[MailService] Resend dispatch failed (${resendError.message}). Falling back...`);
       }
     }
 
-    // Otherwise use SMTP (nodemailer)
+    // 3. Try custom HTTP Mail Webhook (e.g. Google Apps Script email relay over Port 443)
+    if (mailConfig.mailWebhookUrl) {
+      try {
+        await this.sendViaWebhook(options);
+        return;
+      } catch (webhookError: any) {
+        console.warn(`[MailService] Webhook dispatch failed (${webhookError.message}). Falling back...`);
+      }
+    }
+
+    // 4. Fallback to direct SMTP (Works on local dev and hosting without firewall restrictions on ports 587/465)
     if (!mailConfig.auth.user || !mailConfig.auth.pass) {
       console.warn('[MailService] SMTP credentials not configured. Skipping email dispatch.');
       return;
