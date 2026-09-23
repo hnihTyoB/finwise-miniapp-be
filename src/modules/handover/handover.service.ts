@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import { AppError } from '../../common/errors/app-error';
 import { ERROR_CODE } from '../../common/errors/error-code';
 import { envConfig } from '../../config/env.config';
+import { MailService } from '../../common/services/mail.service';
 import { HandoverRepository } from './handover.repository';
 import {
   ClaimHandoverDto,
@@ -19,7 +20,20 @@ export class HandoverService {
   private readonly HANDOVER_TTL_SECONDS = 900; // 15 minutes
   private readonly MAX_FAILED_ATTEMPTS = 5;
 
-  constructor(private readonly repository: HandoverRepository = new HandoverRepository()) {}
+  constructor(
+    private readonly repository: HandoverRepository = new HandoverRepository(),
+    private readonly mailService: MailService = new MailService(),
+  ) {}
+
+  private maskEmail(email: string): string {
+    const [user, domain] = email.split('@');
+    if (!domain) return email;
+    const maskedUser =
+      user.length <= 2
+        ? user[0] + '***'
+        : user.substring(0, 2) + '***' + user.substring(user.length - 1);
+    return `${maskedUser}@${domain}`;
+  }
 
   private getHandoverSecret(): string {
     return envConfig.jwt.accessSecret || 'finwise-handover-secret-salt-2026';
@@ -42,6 +56,14 @@ export class HandoverService {
     const user = await this.repository.findUserById(userId);
     if (!user || !user.isActive || user.deletedAt !== null) {
       throw new AppError('Tài khoản không hợp lệ hoặc đã bị vô hiệu hóa', 400, ERROR_CODE.USER_INACTIVE);
+    }
+
+    if (!user.email) {
+      throw new AppError(
+        'Tài khoản của bạn chưa có Email liên kết. Để nhận mã OTP xác thực chuyển giao quyền sở hữu, vui lòng cập nhật Email trong Cài đặt tài khoản trước.',
+        400,
+        ERROR_CODE.VALIDATION_ERROR,
+      );
     }
 
     // Xóa phiên cũ nếu có
@@ -137,6 +159,8 @@ export class HandoverService {
       Math.floor((new Date(session.expiresAt).getTime() - Date.now()) / 1000),
     );
 
+    const maskedEmail = session.sourceUserEmail ? this.maskEmail(session.sourceUserEmail) : undefined;
+
     return {
       handoverToken: session.handoverToken,
       status: session.status,
@@ -144,9 +168,10 @@ export class HandoverService {
       expiresIn,
       targetUserId: session.targetUserId,
       targetUserName: session.targetUserName,
+      sourceUserEmailMasked: maskedEmail,
       otpPrompt:
         session.status === 'CLAIMED'
-          ? `Nhập mã OTP gồm 6 chữ số để xác nhận chuyển toàn bộ dữ liệu sang tài khoản ${session.targetUserName || 'mới'}`
+          ? `Mã xác thực OTP gồm 6 chữ số đã được gửi đến email ${maskedEmail || 'liên kết'}. Vui lòng nhập mã để xác nhận chuyển toàn bộ dữ liệu sang tài khoản ${session.targetUserName || 'mới'}.`
           : undefined,
       otpCodeDev: process.env.NODE_ENV !== 'production' ? session.otpCode : undefined,
     };
@@ -263,6 +288,19 @@ export class HandoverService {
     session.targetUserName = targetUser.fullName || targetUser.email || targetUser.phoneNumber || 'Tài khoản mới';
 
     await this.repository.saveSession(session, remainingTtl);
+
+    // Gửi email OTP xác nhận chuyển giao tới chủ tài khoản Máy A
+    if (session.sourceUserEmail) {
+      await this.mailService.sendHandoverOtpEmail(
+        session.sourceUserEmail,
+        session.otpCode,
+        {
+          targetUserName: session.targetUserName || 'Tài khoản mới',
+          expiresInMinutes: Math.max(1, Math.round(remainingTtl / 60)),
+        },
+        session.sourceUserName,
+      );
+    }
 
     await this.repository.createAuditLog({
       actorId: targetUserId,

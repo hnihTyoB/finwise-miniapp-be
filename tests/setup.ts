@@ -21,6 +21,7 @@ jest.mock('../src/common/services/mail.service', () => {
         sendPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
         sendNewDeviceAlertEmail: jest.fn().mockResolvedValue(undefined),
         sendNotificationEmail: jest.fn().mockResolvedValue(undefined),
+        sendHandoverOtpEmail: jest.fn().mockResolvedValue(undefined),
       };
     }),
   };
