@@ -36,9 +36,19 @@ export class StatementController {
     try {
       const userId = req.user!.id;
       const { id } = req.params;
-      const result = await statementService.downloadStatement(userId, id);
+      const proxy = req.query.proxy === 'true' || req.headers['x-download-mode'] === 'stream';
+      const result = await statementService.downloadStatement(userId, id, proxy);
       if (result.type === 'redirect') {
         res.redirect(result.url);
+        return;
+      }
+      if (result.type === 'stream') {
+        res.setHeader('Content-Type', result.mimeType);
+        res.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
+        if (result.contentLength) {
+          res.setHeader('Content-Length', result.contentLength.toString());
+        }
+        result.stream.pipe(res);
         return;
       }
       if (result.type === 'file') {

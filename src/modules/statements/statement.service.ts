@@ -1,8 +1,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { StatementExportFormat } from '@prisma/client';
 import { AppError } from '../../common/errors/app-error';
 import { ERROR_CODE } from '../../common/errors/error-code';
+import { envConfig } from '../../config/env.config';
 import { uuidv7 } from '../../common/helpers/uuid.helper';
 import { prisma } from '../../database/prisma.client';
 import { StatementRepository } from './statement.repository';
@@ -75,9 +77,14 @@ export class StatementService {
     return this.toResponseDto(job, job.fileUrl, (job as any).wallet?.name ?? null);
   }
 
-  async downloadStatement(userId: string, jobId: string): Promise<
+  async downloadStatement(
+    userId: string,
+    jobId: string,
+    proxy = false,
+  ): Promise<
     | { type: 'redirect'; url: string }
     | { type: 'file'; filePath: string; fileName: string; mimeType: string }
+    | { type: 'stream'; stream: any; fileName: string; mimeType: string; contentLength?: number }
   > {
     const job = await this.repository.findByIdAndUserId(jobId, userId);
     if (!job) {
@@ -92,29 +99,63 @@ export class StatementService {
       throw new AppError('Statement download link has expired', 410, ERROR_CODE.STATEMENT_EXPIRED);
     }
 
+    const mimeTypes: Record<string, string> = {
+      xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      pdf: 'application/pdf',
+      csv: 'text/csv; charset=utf-8',
+    };
+    const ext = job.format.toLowerCase();
+    const fileName = `finwise-statement-${job.id.slice(0, 8)}.${ext}`;
+    const mimeType = mimeTypes[ext] || 'application/octet-stream';
+
+    // If proxy streaming requested and file is stored in Cloudflare R2
+    const targetFileKey = job.fileKey || `statements/${job.userId}/${job.id}.${ext}`;
+    if (proxy && envConfig.r2.bucketName && envConfig.r2.accountId) {
+      try {
+        const s3 = new S3Client({
+          region: 'auto',
+          endpoint: `https://${envConfig.r2.accountId}.r2.cloudflarestorage.com`,
+          credentials: {
+            accessKeyId: envConfig.r2.accessKeyId,
+            secretAccessKey: envConfig.r2.secretAccessKey,
+          },
+        });
+        const object = await s3.send(
+          new GetObjectCommand({
+            Bucket: envConfig.r2.bucketName,
+            Key: targetFileKey,
+          }),
+        );
+        if (object.Body) {
+          return {
+            type: 'stream',
+            stream: object.Body,
+            fileName,
+            mimeType,
+            contentLength: object.ContentLength,
+          };
+        }
+      } catch (r2Err) {
+        console.warn('[StatementService] R2 proxy stream failed, falling back:', r2Err);
+      }
+    }
+
     // External URL (Cloudflare R2 / S3 presigned)
     if (job.fileUrl && job.fileUrl.startsWith('http')) {
       return { type: 'redirect', url: job.fileUrl };
     }
 
     // Local file fallback
-    const ext = job.format.toLowerCase();
     const filePath = path.resolve(process.cwd(), 'storage/exports', userId, `${job.id}.${ext}`);
     if (!fs.existsSync(filePath)) {
       throw new AppError('Statement export file not found on server', 404, ERROR_CODE.STATEMENT_FILE_NOT_FOUND);
     }
 
-    const mimeTypes: Record<string, string> = {
-      xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      pdf: 'application/pdf',
-      csv: 'text/csv; charset=utf-8',
-    };
-
     return {
       type: 'file',
       filePath,
-      fileName: `finwise-statement-${job.id.slice(0, 8)}.${ext}`,
-      mimeType: mimeTypes[ext] || 'application/octet-stream',
+      fileName,
+      mimeType,
     };
   }
 
