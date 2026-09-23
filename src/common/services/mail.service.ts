@@ -1,5 +1,24 @@
+import dns from 'dns';
 import nodemailer from 'nodemailer';
 import { mailConfig } from '../../config/mail.config';
+
+// Force IPv4-first resolution in Node.js runtime to prevent ENETUNREACH on platforms without IPv6 routing (e.g. Render)
+try {
+  dns.setDefaultResultOrder?.('ipv4first');
+} catch {}
+
+// Prevent nodemailer from selecting IPv6 addresses when running in containers without public IPv6 routing
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const shared = require('nodemailer/lib/shared');
+  if (shared && shared.networkInterfaces) {
+    for (const key of Object.keys(shared.networkInterfaces)) {
+      shared.networkInterfaces[key] = shared.networkInterfaces[key].filter(
+        (i: any) => i.family !== 'IPv6' && i.family !== 6,
+      );
+    }
+  }
+} catch {}
 
 interface SendMailOptions {
   to: string;
@@ -12,34 +31,28 @@ export class MailService {
   private transporter: nodemailer.Transporter;
 
   constructor() {
-    const isGmail = mailConfig.host === 'smtp.gmail.com' || mailConfig.host.includes('gmail');
-    this.transporter = nodemailer.createTransport(
-      isGmail
-        ? ({
-            service: 'gmail',
-            auth: {
-              user: mailConfig.auth.user,
-              pass: mailConfig.auth.pass,
-            },
-            connectionTimeout: 10000,
-            greetingTimeout: 10000,
-            socketTimeout: 15000,
-          } as any)
-        : ({
-            host: mailConfig.host,
-            port: mailConfig.port,
-            secure: mailConfig.secure,
-            family: 4, // Force IPv4 to prevent ENETUNREACH on environments without IPv6 routing
-            auth: {
-              user: mailConfig.auth.user,
-              pass: mailConfig.auth.pass,
-            },
-            // Explicit timeouts to prevent hanging indefinitely on cloud platforms (e.g. Render)
-            connectionTimeout: 5000,
-            greetingTimeout: 5000,
-            socketTimeout: 8000,
-          } as any),
-    );
+    this.transporter = this.createTransporter(mailConfig.port || 587, mailConfig.secure);
+  }
+
+  private createTransporter(port: number, secure: boolean): nodemailer.Transporter {
+    return nodemailer.createTransport({
+      host: mailConfig.host || 'smtp.gmail.com',
+      port,
+      secure,
+      requireTLS: !secure,
+      family: 4, // Force IPv4 to prevent ENETUNREACH on environments without IPv6 routing
+      auth: {
+        user: mailConfig.auth.user,
+        pass: mailConfig.auth.pass,
+      },
+      tls: {
+        rejectUnauthorized: false,
+        servername: mailConfig.host || 'smtp.gmail.com',
+      },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
+    } as any);
   }
 
   private async sendViaResend(options: SendMailOptions): Promise<void> {
@@ -82,12 +95,31 @@ export class MailService {
       return;
     }
 
-    await this.transporter.sendMail({
-      from: options.from || mailConfig.from,
-      to: options.to,
-      subject: options.subject,
-      html: options.html,
-    });
+    const primaryPort = mailConfig.port || 587;
+    const primarySecure = mailConfig.secure || primaryPort === 465;
+
+    try {
+      await this.transporter.sendMail({
+        from: options.from || mailConfig.from,
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+      });
+    } catch (smtpError: any) {
+      // If primary port was 587 and it failed with a connection error, retry on port 465 (or vice versa)
+      const altPort = primaryPort === 587 ? 465 : 587;
+      const altSecure = altPort === 465;
+      console.warn(
+        `[MailService] SMTP dispatch failed on port ${primaryPort} (${smtpError.message}). Retrying on alternative port ${altPort} over IPv4...`,
+      );
+      const fallbackTransporter = this.createTransporter(altPort, altSecure);
+      await fallbackTransporter.sendMail({
+        from: options.from || mailConfig.from,
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+      });
+    }
   }
 
   async sendVerificationEmail(email: string, token: string, fullName?: string) {
