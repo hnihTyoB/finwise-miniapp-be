@@ -37,6 +37,8 @@ export class StatementController {
       const userId = req.user!.id;
       const { id } = req.params;
       const proxy = req.query.proxy === 'true' || req.headers['x-download-mode'] === 'stream';
+      // When inline=true (used by Zalo openDocument), serve as inline so Zalo can preview it
+      const inline = req.query.inline === 'true';
       const result = await statementService.downloadStatement(userId, id, proxy);
       if (result.type === 'redirect') {
         res.redirect(result.url);
@@ -44,7 +46,10 @@ export class StatementController {
       }
       if (result.type === 'stream') {
         res.setHeader('Content-Type', result.mimeType);
-        res.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
+        const disposition = inline
+          ? `inline; filename="${result.fileName}"`
+          : `attachment; filename="${result.fileName}"`;
+        res.setHeader('Content-Disposition', disposition);
         if (result.contentLength) {
           res.setHeader('Content-Length', result.contentLength.toString());
         }
