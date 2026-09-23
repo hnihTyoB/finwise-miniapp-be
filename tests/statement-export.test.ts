@@ -316,6 +316,7 @@ describe('Statement Export Integration & Unit Tests', () => {
         where: { id: createdJobId },
         data: {
           fileUrl: 'https://r2.finwise.app/statements/test-file.xlsx',
+          status: 'COMPLETED',
         },
       });
 
@@ -353,6 +354,34 @@ describe('Statement Export Integration & Unit Tests', () => {
 
       expect(res.status).toBe(200);
       expect(res.headers['content-disposition']).toContain('attachment');
+    });
+
+    it('should successfully download using token in query string without Authorization header', async () => {
+      const queryJob = await prisma.statementJob.create({
+        data: {
+          userId,
+          format: 'CSV',
+          dateFrom: new Date('2026-08-01'),
+          dateTo: new Date('2026-08-31'),
+          status: 'COMPLETED',
+          completedAt: new Date(),
+          fileSize: 15,
+          expiresAt: new Date(Date.now() + 48 * 3600 * 1000),
+          verificationCode: `FW-QUERY-${Date.now().toString(36).toUpperCase()}`,
+        },
+      });
+
+      const { mkdirSync, writeFileSync } = await import('fs');
+      const exportDir = `storage/exports/${userId}`;
+      mkdirSync(exportDir, { recursive: true });
+      writeFileSync(`${exportDir}/${queryJob.id}.csv`, 'col1,col2\nval1,val2');
+
+      const res = await request(app)
+        .get(`/api/v1/statements/jobs/${queryJob.id}/download?token=${accessToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toContain('text/csv');
+      expect(res.headers['content-disposition']).toContain(`attachment; filename="finwise-statement-${queryJob.id.slice(0, 8)}.csv"`);
     });
   });
 

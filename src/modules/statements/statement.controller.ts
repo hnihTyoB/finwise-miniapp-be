@@ -42,6 +42,7 @@ export class StatementController {
         return;
       }
       if (result.type === 'file') {
+        res.setHeader('Content-Type', result.mimeType);
         res.download(result.filePath, result.fileName);
         return;
       }

@@ -20,9 +20,10 @@ export async function authMiddleware(
     }
   }
 
-  // Allow query token ONLY for EventSource / SSE connection endpoints
+  // Allow query token for EventSource / SSE connection endpoints and file download endpoints
   const isSseRequest = req.path.endsWith('/stream') || req.headers.accept?.includes('text/event-stream');
-  if (!token && isSseRequest && typeof req.query?.token === 'string') {
+  const isDownloadRequest = req.path.includes('/download');
+  if (!token && (isSseRequest || isDownloadRequest) && typeof req.query?.token === 'string') {
     token = req.query.token;
   }
 
