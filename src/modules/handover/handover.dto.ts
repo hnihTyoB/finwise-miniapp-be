@@ -78,6 +78,7 @@ export interface HandoverStatusResponseDto {
   targetUserName?: string | null;
   otpPrompt?: string;
   otpCodeDev?: string; // in dev/test only
+  sourceUserEmailMasked?: string;
 }
 
 export interface HandoverResultResponseDto {
