@@ -252,7 +252,7 @@ export class StatementQueueService {
         ? 'application/pdf'
         : format === 'XLSX'
           ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-          : 'text/csv; charset=utf-8';
+          : 'text/csv';
 
       const EXPIRES_HOURS = envConfig.statementExport.expiryHours;
       const expiresAt = new Date(Date.now() + EXPIRES_HOURS * 3600 * 1000);

@@ -46,7 +46,8 @@ export class StatementController {
       }
       if (result.type === 'stream') {
         res.setHeader('Content-Type', result.mimeType);
-        const disposition = inline
+        const isPdf = result.fileName.toLowerCase().endsWith('.pdf');
+        const disposition = inline && isPdf
           ? `inline; filename="${result.fileName}"`
           : `attachment; filename="${result.fileName}"`;
         res.setHeader('Content-Disposition', disposition);

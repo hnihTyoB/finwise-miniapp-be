@@ -102,7 +102,7 @@ export class StatementService {
     const mimeTypes: Record<string, string> = {
       xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       pdf: 'application/pdf',
-      csv: 'text/csv; charset=utf-8',
+      csv: 'text/csv',
     };
     const ext = job.format.toLowerCase();
     const fileName = `finwise-statement-${job.id.slice(0, 8)}.${ext}`;
