@@ -265,4 +265,82 @@ export class MailService {
       throw error;
     }
   }
+
+  async sendHandoverOtpEmail(
+    email: string,
+    otp: string,
+    details: {
+      targetUserName: string;
+      expiresInMinutes: number;
+    },
+    fullName?: string | null,
+  ): Promise<void> {
+    const formattedMinutes = details.expiresInMinutes > 0 ? details.expiresInMinutes : 15;
+    const mailOptions: SendMailOptions = {
+      from: mailConfig.from,
+      to: email,
+      subject: '[FinWise] Mã OTP xác nhận chuyển giao quyền sở hữu tài khoản',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px; background-color: #ffffff;">
+          <div style="text-align: center; margin-bottom: 24px;">
+            <h2 style="color: #0f172a; margin: 0; font-size: 22px;">Xác Nhận Chuyển Giao Quyền Sở Hữu</h2>
+            <p style="color: #64748b; font-size: 14px; margin-top: 6px;">FinWise - Sổ tay Tài chính & Báo cáo Thông minh</p>
+          </div>
+
+          <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 14px 16px; border-radius: 4px; margin-bottom: 20px;">
+            <p style="color: #991b1b; font-weight: bold; margin: 0 0 4px 0; font-size: 14px;">Cảnh Báo Bảo Mật Quan Trọng</p>
+            <p style="color: #7f1d1d; margin: 0; font-size: 13px; line-height: 1.5;">
+              Tài khoản <strong>${details.targetUserName}</strong> vừa yêu cầu nhận chuyển giao toàn bộ dữ liệu tài chính (ví tiền, lịch sử giao dịch, ngân sách, mục tiêu) từ tài khoản của bạn.
+            </p>
+          </div>
+
+          <p style="color: #334155; font-size: 14px; line-height: 1.6;">
+            Chào <strong>${fullName || 'bạn'}</strong>,<br/>
+            Nếu bạn đang thực hiện chuyển giao sang tài khoản Zalo mới, vui lòng nhập mã OTP dưới đây vào ứng dụng để ký duyệt lệnh chuyển giao:
+          </p>
+
+          <div style="text-align: center; margin: 28px 0; padding: 18px; background-color: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 8px;">
+            <span style="font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 8px;">Mã Xác Thực OTP Của Bạn</span>
+            <span style="font-family: 'Courier New', Courier, monospace; font-size: 36px; font-weight: bold; letter-spacing: 10px; color: #0284c7; display: inline-block;">${otp}</span>
+            <span style="font-size: 12px; color: #dc2626; display: block; margin-top: 10px; font-weight: 500;">
+              Mã có hiệu lực trong vòng ${formattedMinutes} phút
+            </span>
+          </div>
+
+          <div style="background-color: #f1f5f9; padding: 14px; border-radius: 6px; font-size: 12px; color: #475569; line-height: 1.5; margin-bottom: 24px;">
+            <p style="margin: 0 0 6px 0;"><strong>Lưu ý an toàn:</strong></p>
+            <ul style="margin: 0; padding-left: 18px;">
+              <li>Sau khi xác nhận, toàn bộ dữ liệu sẽ được chuyển giao vĩnh viễn và tài khoản hiện tại sẽ tự động đăng xuất.</li>
+              <li>Tuyệt đối <strong>KHÔNG</strong> chia sẻ mã OTP này cho bất kỳ ai khác.</li>
+              <li>Nếu bạn <strong>KHÔNG</strong> thực hiện yêu cầu này, vui lòng mở ứng dụng và nhấn <strong>"Từ chối & Hủy bỏ"</strong> ngay lập tức.</li>
+            </ul>
+          </div>
+
+          <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+          <p style="font-size: 11px; color: #94a3b8; text-align: center; margin: 0;">
+            Đây là email tự động từ hệ thống bảo mật FinWise. Vui lòng không trả lời thư này.
+          </p>
+        </div>
+      `,
+    };
+
+    if (!mailConfig.isConfigured) {
+      console.warn('-------- HANDOVER OTP EMAIL (DEV MODE) --------');
+      console.warn(`To: ${email}`);
+      console.warn(`Target User: ${details.targetUserName}`);
+      console.warn(`OTP Code: ${otp}`);
+      console.warn(`Expires In: ${formattedMinutes} minutes`);
+      console.warn('-----------------------------------------------');
+      return;
+    }
+
+    try {
+      await this.dispatchEmail(mailOptions);
+    } catch (error) {
+      console.error('[MailService] Failed to send handover OTP email:', error);
+      console.warn('-------- HANDOVER OTP FALLBACK LOG --------');
+      console.warn(`To: ${email} | OTP: ${otp}`);
+      console.warn('-------------------------------------------');
+    }
+  }
 }
