@@ -56,30 +56,6 @@ export class MailService {
     } as any);
   }
 
-  private async sendViaBrevo(options: SendMailOptions): Promise<void> {
-    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-      method: 'POST',
-      headers: {
-        'api-key': mailConfig.brevoApiKey,
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({
-        sender: {
-          name: 'FinWise',
-          email: mailConfig.auth.user || 'nctmdt@gmail.com',
-        },
-        to: [{ email: options.to }],
-        subject: options.subject,
-        htmlContent: options.html,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '');
-      throw new Error(`Brevo API HTTP ${response.status}: ${errorText}`);
-    }
-  }
 
   private async sendViaWebhook(options: SendMailOptions): Promise<void> {
     const response = await fetch(mailConfig.mailWebhookUrl, {
@@ -129,17 +105,7 @@ export class MailService {
   }
 
   private async dispatchEmail(options: SendMailOptions): Promise<void> {
-    // 1. Try Brevo HTTPS REST API (Port 443 - Never blocked on Render free tier, sends to any recipient)
-    if (mailConfig.brevoApiKey) {
-      try {
-        await this.sendViaBrevo(options);
-        return;
-      } catch (brevoError: any) {
-        console.warn(`[MailService] Brevo dispatch failed (${brevoError.message}). Falling back...`);
-      }
-    }
-
-    // 2. Try Resend HTTPS REST API (Port 443 - Never blocked on Render free tier)
+    // 1. Try Resend HTTPS REST API (Fastest, verified custom domain thinher.io.vn)
     if (mailConfig.resendApiKey) {
       try {
         await this.sendViaResend(options);
@@ -148,6 +114,7 @@ export class MailService {
         console.warn(`[MailService] Resend dispatch failed (${resendError.message}). Falling back...`);
       }
     }
+
 
     // 3. Try custom HTTP Mail Webhook (e.g. Google Apps Script email relay over Port 443)
     if (mailConfig.mailWebhookUrl) {
