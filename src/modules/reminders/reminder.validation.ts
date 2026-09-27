@@ -82,3 +82,16 @@ export const updateReminderSchema = z
   .refine((data) => Object.keys(data).length > 0, {
     message: 'At least one field is required',
   });
+
+export const updateDailyTransactionReminderSchema = z.object({
+  isActive: z.boolean(),
+  time: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/, 'time must match HH:mm format (e.g. "20:00")')
+    .refine((value) => {
+      const [h, m] = value.split(':').map(Number);
+      return h >= 0 && h <= 23 && m >= 0 && m <= 59;
+    }, 'time must be a valid HH:mm value')
+    .optional(),
+});
+

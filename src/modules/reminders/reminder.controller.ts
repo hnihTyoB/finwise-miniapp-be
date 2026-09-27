@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from 'express';
 import {
   CreateReminderDto,
   ReminderQueryDto,
+  UpdateDailyTransactionReminderDto,
   UpdateReminderDto,
 } from './reminder.dto';
 import { ReminderService } from './reminder.service';
@@ -63,4 +64,29 @@ export class ReminderController {
       next(error);
     }
   };
+
+  // ─── Daily Transaction Reminder ─────────────────────────────────────────────
+
+  getDailyTransactionReminder = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = await this.service.getDailyTransactionReminder(req.user.id, new Date());
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updateDailyTransactionReminder = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = await this.service.updateDailyTransactionReminder(
+        req.user.id,
+        req.body as UpdateDailyTransactionReminderDto,
+        new Date(),
+      );
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  };
 }
+

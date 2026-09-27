@@ -45,3 +45,18 @@ export interface PersistReminderDto {
   actionUrl: string | null;
   isActive: boolean;
 }
+
+export interface DailyTransactionReminderDto {
+  id: string | null;
+  isActive: boolean;
+  time: string;
+  title: string;
+  message: string;
+  nextTriggerAt: Date | null;
+  hasCreatedTransactionToday: boolean;
+}
+
+export interface UpdateDailyTransactionReminderDto {
+  isActive: boolean;
+  time?: string;
+}

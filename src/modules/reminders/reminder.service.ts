@@ -5,14 +5,17 @@ import {
   addBusinessMonthsClamped,
   businessDateToPrismaDate,
   businessWallTimeToInstant,
+  instantToBusinessDate,
   instantToBusinessWallTime,
 } from '../../common/date-time/business-time';
 import { ERROR_CODE } from '../../common/errors/error-code';
 import { NotificationService } from '../notifications/notification.service';
 import {
   CreateReminderDto,
+  DailyTransactionReminderDto,
   PersistReminderDto,
   ReminderQueryDto,
+  UpdateDailyTransactionReminderDto,
   UpdateReminderDto,
 } from './reminder.dto';
 import { ReminderRecord, ReminderRepository } from './reminder.repository';
@@ -49,6 +52,36 @@ export class ReminderService {
   async processDue(now: Date) {
     const due = await this.repository.findDue(now);
     for (const reminder of due) {
+      // Smart-skip for the daily-transaction reminder:
+      // Do not send notification if the user already has a transaction today.
+      if (reminder.actionUrl === '/transactions?daily=1') {
+        const todayDate = instantToBusinessDate(now);
+        const count = await this.repository.countTodayTransactions(reminder.userId, todayDate);
+        if (count > 0) {
+          // Reschedule to next day without firing a notification
+          const nextTriggerAt = this.calculateNextTrigger(
+            reminder.remindAt,
+            reminder.frequency,
+            reminder.repeatInterval,
+            reminder.endAt,
+            now,
+          );
+          await this.repository.update(reminder.id, {
+            type: reminder.type,
+            title: reminder.title,
+            message: reminder.message,
+            remindAt: reminder.remindAt,
+            frequency: reminder.frequency,
+            repeatInterval: reminder.repeatInterval,
+            endAt: reminder.endAt,
+            nextTriggerAt,
+            actionUrl: reminder.actionUrl,
+            isActive: nextTriggerAt !== null,
+          });
+          continue;
+        }
+      }
+
       const nextTriggerAt = this.calculateNextTrigger(
         reminder.remindAt,
         reminder.frequency,
@@ -65,6 +98,82 @@ export class ReminderService {
       await this.repository.triggerDue(reminder, now, nextTriggerAt, channels);
     }
     return due.length;
+  }
+
+  // ─── Daily Transaction Reminder ────────────────────────────────────────────
+
+  async getDailyTransactionReminder(
+    userId: string,
+    now: Date,
+  ): Promise<DailyTransactionReminderDto> {
+    const reminder = await this.repository.findDailyTransactionReminder(userId);
+    const todayDate = instantToBusinessDate(now);
+    const todayCount = await this.repository.countTodayTransactions(userId, todayDate);
+
+    // Resolve template from NotificationTemplate in DB (editable via Quản lý thông báo in Admin)
+    const template = await this.repository.findDailyReminderTemplate();
+    const resolvedTitle = template?.titleTemplate ?? reminder?.title ?? 'Nhắc nhở ghi chép giao dịch hôm nay';
+    const resolvedMessage = template?.bodyTemplate ?? reminder?.message ?? 'Hôm nay bạn chưa ghi nhận giao dịch nào. Hãy dành ít phút cập nhật chi tiêu để quản lý ngân sách chính xác nhé!';
+
+    const { time } = instantToBusinessWallTime(reminder?.remindAt ?? new Date());
+    const reminderTime = reminder
+      ? time.slice(0, 5)        // 'HH:mm'
+      : '20:00';
+
+    return {
+      id: reminder?.id ?? null,
+      isActive: reminder?.isActive ?? false,
+      time: reminderTime,
+      title: resolvedTitle,
+      message: resolvedMessage,
+      nextTriggerAt: reminder?.nextTriggerAt ?? null,
+      hasCreatedTransactionToday: todayCount > 0,
+    };
+  }
+
+  async updateDailyTransactionReminder(
+    userId: string,
+    data: UpdateDailyTransactionReminderDto,
+    now: Date,
+  ): Promise<DailyTransactionReminderDto> {
+    const todayDate = instantToBusinessDate(now);
+
+    const existing = await this.repository.findDailyTransactionReminder(userId);
+    // Resolve template from NotificationTemplate in DB
+    const template = await this.repository.findDailyReminderTemplate();
+    const title = template?.titleTemplate ?? existing?.title ?? 'Nhắc nhở ghi chép giao dịch hôm nay';
+    const message = template?.bodyTemplate ?? existing?.message ?? 'Hôm nay bạn chưa ghi nhận giao dịch nào. Hãy dành ít phút cập nhật chi tiêu để quản lý ngân sách chính xác nhé!';
+
+    // Honour existing time if caller did not specify a new one
+    let resolvedTime = data.time;
+    if (!resolvedTime && existing) {
+      const { time: existingTime } = instantToBusinessWallTime(existing.remindAt);
+      resolvedTime = existingTime.slice(0, 5);
+    }
+    const [h, m] = (resolvedTime ?? '20:00').split(':').map(Number);
+
+    // Build the remindAt using today's date in business timezone at desired HH:mm
+    const remindAt = businessWallTimeToInstant(
+      todayDate,
+      `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`,
+    );
+
+    let nextTriggerAt: Date | null = null;
+    if (data.isActive) {
+      const candidate = this.nextOccurrenceAfter(remindAt, ReminderFrequency.DAILY, 1, now);
+      nextTriggerAt = candidate;
+    }
+
+    await this.repository.upsertDailyTransactionReminder(
+      userId,
+      remindAt,
+      nextTriggerAt,
+      data.isActive,
+      title,
+      message,
+    );
+
+    return this.getDailyTransactionReminder(userId, now);
   }
 
   private resolveCreate(data: CreateReminderDto): PersistReminderDto {

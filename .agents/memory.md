@@ -159,6 +159,19 @@ File này chỉ lưu sự thật và quyết định dài hạn giúp các phiê
 - Giao dịch tự động định kỳ hỗ trợ thông báo nhắc nhở trước hạn thanh toán qua trường tùy chọn `remindDaysBefore` (0–30 ngày). Nhắc nhở được liên kết nguyên tử với bảng Reminder (`type: RECURRING_PAYMENT`, `actionUrl: /recurring-transactions?id=${scheduleId}&remindDaysBefore=${days}`) không cần migration DB; tự động xóa, cập nhật, tạm dừng hoặc khôi phục đồng bộ theo trạng thái của lịch giao dịch. Thuật toán phát hiện Subscription tự động quét giao dịch định kỳ, phát hiện tăng giá cước (> 5.0%), liên kết trực tiếp vào lịch giao dịch tự động và loại trừ các dịch vụ đã được lên lịch.
   Migration history cũ vẫn chưa phản ánh đầy đủ các thay đổi schema của auth đã
   được commit trước đó.
+- Daily Transaction Reminder là nhắc nhở hệ thống (do server quản lý, không phải user-created).
+  Được định danh bằng `actionUrl = '/transactions?daily=1'` trong bảng Reminder. Worker xử lý
+  như reminder thường nhưng smart-skip khi user đã có >= 1 transaction trong ngày kinh doanh
+  (Asia/Ho_Chi_Minh); nếu skip, chỉ cập nhật nextTriggerAt không gửi thông báo.
+  API: `GET /reminders/daily-transaction` và `PUT /reminders/daily-transaction` (không cần migration
+  mới vì dùng bảng Reminder hiện có). Response trả `hasCreatedTransactionToday` để FE hiển thị
+  badge trạng thái hôm nay. Route phải đặt trước `/:id` trong router để tránh bị match sai.
+  Mẫu thông báo (tiêu đề và nội dung) được lưu và quản lý tập trung trong bảng `NotificationTemplate`
+  (`type: USER_REMINDER`), được cấu hình trong `prisma/seed.ts` và chỉnh sửa trực tiếp bởi Quản trị viên
+  tại trang Quản lý thông báo (`/admin/notifications` -> tab Mẫu thông báo). Tuyệt đối không hardcode
+  hoặc lưu mẫu thông báo trong các file validation/code, và giao diện người dùng chỉ cho phép bật/tắt
+  và chọn giờ nhắc nhở.
+
 
 ## Khi cập nhật file này
 

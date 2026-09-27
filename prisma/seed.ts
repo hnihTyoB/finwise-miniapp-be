@@ -1137,6 +1137,22 @@ async function seedDemoData(userId: string) {
       bodyTemplate: 'Transaction of {{amount}} {{currency}} flagged: {{explanation}}.',
       isActive: true,
     },
+    {
+      type: NotificationType.USER_REMINDER,
+      channel: NotificationChannel.IN_APP,
+      language: 'vi',
+      titleTemplate: 'Nhắc nhở ghi chép giao dịch hôm nay',
+      bodyTemplate: 'Hôm nay bạn chưa ghi nhận giao dịch nào. Hãy dành ít phút cập nhật chi tiêu để quản lý ngân sách chính xác nhé!',
+      isActive: true,
+    },
+    {
+      type: NotificationType.USER_REMINDER,
+      channel: NotificationChannel.IN_APP,
+      language: 'en',
+      titleTemplate: 'Daily transaction reminder',
+      bodyTemplate: 'You haven\'t recorded any transactions today. Take a few minutes to log your spending to keep your budget accurate!',
+      isActive: true,
+    },
   ];
 
   for (const template of defaultTemplates) {

@@ -8,6 +8,7 @@ import {
   createReminderSchema,
   findRemindersSchema,
   reminderParamsSchema,
+  updateDailyTransactionReminderSchema,
   updateReminderSchema,
 } from './reminder.validation';
 
@@ -18,6 +19,11 @@ router.use(authMiddleware);
 
 router.get('/', requirePermission(PERMISSIONS.REMINDER_READ), validate(findRemindersSchema, 'query'), controller.findAll);
 router.post('/', requirePermission(PERMISSIONS.REMINDER_CREATE), validate(createReminderSchema), controller.create);
+
+// Daily-transaction reminder — must be defined before /:id to avoid pattern clash
+router.get('/daily-transaction', requirePermission(PERMISSIONS.REMINDER_READ), controller.getDailyTransactionReminder);
+router.put('/daily-transaction', requirePermission(PERMISSIONS.REMINDER_UPDATE), validate(updateDailyTransactionReminderSchema), controller.updateDailyTransactionReminder);
+
 router.get('/:id', requirePermission(PERMISSIONS.REMINDER_READ), validate(reminderParamsSchema, 'params'), controller.findById);
 router.put(
   '/:id',
@@ -29,3 +35,4 @@ router.put(
 router.delete('/:id', requirePermission(PERMISSIONS.REMINDER_DELETE), validate(reminderParamsSchema, 'params'), controller.remove);
 
 export default router;
+

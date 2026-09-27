@@ -169,8 +169,21 @@ export class ReminderRepository {
             dueDate = addBusinessDays(triggerDate, days);
           }
 
+          let title = reminder.title;
           let message = reminder.message ?? 'A scheduled reminder is due.';
-          if (dueDate && reminder.type === ReminderType.RECURRING_PAYMENT) {
+          if (reminder.actionUrl === '/transactions?daily=1') {
+            const template = await transaction.notificationTemplate.findFirst({
+              where: {
+                type: NotificationType.USER_REMINDER,
+                channel: NotificationChannel.IN_APP,
+                isActive: true,
+              },
+            });
+            if (template) {
+              title = template.titleTemplate;
+              message = template.bodyTemplate;
+            }
+          } else if (dueDate && reminder.type === ReminderType.RECURRING_PAYMENT) {
             if (!message.includes(dueDate)) {
               message = message.replace(/\.?$/, ` vào ngày ${dueDate}.`);
             }
@@ -183,7 +196,7 @@ export class ReminderRepository {
               priority: reminder.type === ReminderType.RECURRING_PAYMENT
                 ? NotificationPriority.HIGH
                 : NotificationPriority.NORMAL,
-              title: reminder.title,
+              title,
               message,
               channels,
               actionUrl: reminder.actionUrl,
@@ -225,5 +238,86 @@ export class ReminderRepository {
       }
       throw error;
     }
+  }
+  /**
+   * Find the system-managed daily-transaction reminder for a user.
+   * Identified by the reserved actionUrl marker.
+   */
+  findDailyTransactionReminder(userId: string) {
+    return prisma.reminder.findFirst({
+      where: {
+        userId,
+        actionUrl: '/transactions?daily=1',
+      },
+      select: reminderSelect,
+    });
+  }
+
+  /**
+   * Find active notification template for daily reminders from notification_templates table.
+   */
+  findDailyReminderTemplate(language: string = 'vi') {
+    return prisma.notificationTemplate.findFirst({
+      where: {
+        type: NotificationType.USER_REMINDER,
+        channel: NotificationChannel.IN_APP,
+        language,
+        isActive: true,
+      },
+    });
+  }
+
+  /**
+   * Create or update the daily-transaction reminder for a user.
+   * remindAt determines the wall-clock time of day (the date part is ignored
+   * by the worker; only the HH:mm is used to reschedule daily).
+   */
+  async upsertDailyTransactionReminder(
+    userId: string,
+    remindAt: Date,
+    nextTriggerAt: Date | null,
+    isActive: boolean,
+    title: string,
+    message: string,
+  ) {
+    const existing = await this.findDailyTransactionReminder(userId);
+    if (existing) {
+      return prisma.reminder.update({
+        where: { id: existing.id },
+        data: { remindAt, nextTriggerAt, isActive, title, message },
+        select: reminderSelect,
+      });
+    }
+    return prisma.reminder.create({
+      data: {
+        userId,
+        type: ReminderType.GENERAL,
+        title,
+        message,
+        remindAt,
+        frequency: 'DAILY',
+        repeatInterval: 1,
+        endAt: null,
+        nextTriggerAt,
+        actionUrl: '/transactions?daily=1',
+        isActive,
+      },
+      select: reminderSelect,
+    });
+  }
+
+  /**
+   * Check whether the user has at least one transaction recorded
+   * on the given business date (YYYY-MM-DD in Asia/Ho_Chi_Minh).
+   */
+  async countTodayTransactions(userId: string, businessDate: string): Promise<number> {
+    const dayStart = new Date(`${businessDate}T00:00:00+07:00`);
+    const dayEnd   = new Date(`${businessDate}T23:59:59.999+07:00`);
+    return prisma.transaction.count({
+      where: {
+        wallet: { userId },
+        createdAt: { gte: dayStart, lte: dayEnd },
+      },
+    });
   }
 }
