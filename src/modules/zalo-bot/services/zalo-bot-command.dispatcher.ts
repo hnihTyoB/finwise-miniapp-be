@@ -1,6 +1,7 @@
-import { prisma } from '../../../database/prisma.client';
+import { zaloBotRepository } from '../zalo-bot.repository';
 import { zaloBotService } from '../../../common/services/zalo-bot.service';
 import { zaloBotLinkService } from './zalo-bot-link.service';
+import { zaloBotFastEntryService } from './zalo-bot-fast-entry.service';
 import { LoggerService } from '../../../common/services/logger.service';
 
 export class ZaloBotCommandDispatcher {
@@ -8,17 +9,23 @@ export class ZaloBotCommandDispatcher {
 
   /**
    * Xử lý tin nhắn đến từ người dùng và điều phối lệnh phù hợp.
+   *
+   * @param payload.replyToMsgId - message_id của tin nhắn Bot mà user đang quote-reply (nếu có)
    */
   async dispatch(payload: {
     chatId: string;
     senderName: string;
     text: string;
+    replyToMsgId?: string;
   }): Promise<void> {
-    const { chatId, senderName, text } = payload;
+    const { chatId, senderName, text, replyToMsgId } = payload;
     const trimmed = text.trim();
     const lower = trimmed.toLowerCase();
 
-    this.logger.info(`Dispatching message from "${senderName}" (${chatId}): "${trimmed}"`);
+    this.logger.info(`Dispatching message from chat ${chatId}`, {
+      hasReplyTo: Boolean(replyToMsgId),
+      textLength: trimmed.length,
+    });
 
     // 1. Kiểm tra nếu là lệnh liên kết: /link <code> hoặc trực tiếp mã FW-XXXX
     const linkMatch = trimmed.match(/^(\/link\s+)?(FW-?[A-Z0-9]{4,6})$/i);
@@ -46,9 +53,30 @@ export class ZaloBotCommandDispatcher {
       return;
     }
 
-    // 5. Mặc định: Phản hồi thông tin trợ giúp tương ứng với trạng thái của tài khoản
-    await this.handleDefaultMessage(chatId, senderName);
+    // 5. Kiểm tra tài khoản đã liên kết chưa
+    const linkedUser = await this.findLinkedUser(chatId);
+
+    if (!linkedUser) {
+      // Chưa liên kết → hướng dẫn
+      await zaloBotService.sendMessage(
+        chatId,
+        `Chào **${senderName}**! 👋\n\n` +
+        `Để nhận cảnh báo chi tiêu và ghi chép tức thì từ FinWise, bạn hãy mở **FinWise Mini App** → vào **Cài đặt thông báo** để lấy mã liên kết và gửi vào đây nhé!`,
+      );
+      return;
+    }
+
+    // 6. Tài khoản đã liên kết → Conversational Fast-Entry
+    const reply = await zaloBotFastEntryService.handleMessage(
+      chatId,
+      linkedUser.userId,
+      trimmed,
+      replyToMsgId,
+    );
+    await zaloBotService.sendMessage(chatId, reply);
   }
+
+  // ─── Lệnh quản lý Bot ────────────────────────────────────────────────────────
 
   private async handleLinkCommand(chatId: string, senderName: string, code: string): Promise<void> {
     const result = await zaloBotLinkService.verifyAndConsumeLinkCode(code, chatId, senderName);
@@ -65,28 +93,19 @@ export class ZaloBotCommandDispatcher {
       `🎉 **Liên kết FinWise thành công!**\n\n` +
       `Xin chào **${result.userName}**, tài khoản Zalo của bạn đã được liên kết với FinWise.\n\n` +
       `✅ Kênh thông báo Zalo đã được bật.\n` +
-      `🔔 Bạn sẽ nhận được các cảnh báo vượt ngân sách, nhắc nhở định kỳ trực tiếp tại đây.\n\n` +
-      `Gõ **/status** để kiểm tra số dư ví hoặc **/help** để xem thêm hướng dẫn.`;
+      `🔔 Bạn sẽ nhận cảnh báo vượt ngân sách, nhắc nhở định kỳ trực tiếp tại đây.\n\n` +
+      `💡 **Ghi chép nhanh ngay trong chat này!**\n` +
+      `Chỉ cần nhắn tin theo dạng:\n` +
+      `• \`Cà phê sáng 35k ví tiền mặt\`\n` +
+      `• \`Ăn trưa 50k\`\n` +
+      `• \`Vừa nhận lương 20tr ví VCB\`\n\n` +
+      `Gõ **/help** để xem đầy đủ hướng dẫn.`;
 
     await zaloBotService.sendMessage(chatId, successMsg);
   }
 
   private async handleStatusCommand(chatId: string): Promise<void> {
-    const settings = await prisma.notificationSetting.findMany({
-      where: { zaloBotChatId: chatId },
-      include: {
-        user: {
-          select: {
-            id: true,
-            fullName: true,
-            wallets: {
-              where: { isArchived: false },
-              select: { name: true, balance: true, currency: true },
-            },
-          },
-        },
-      },
-    });
+    const settings = await zaloBotRepository.findUsersWithWalletsByChatId(chatId);
 
     if (!settings || settings.length === 0) {
       await zaloBotService.sendMessage(
@@ -110,9 +129,9 @@ export class ZaloBotCommandDispatcher {
         for (const w of user.wallets) {
           const bal = Number(w.balance);
           totalBalance += bal;
-          lines.push(`  • ${w.name}: **${bal.toLocaleString('vi-VN')} ${w.currency}**`);
+          lines.push(`  • ${w.name}: **${new Intl.NumberFormat('vi-VN').format(bal)} ${w.currency}**`);
         }
-        lines.push(`  👉 **Tổng cộng: ${totalBalance.toLocaleString('vi-VN')} VND**`);
+        lines.push(`  👉 **Tổng cộng: ${new Intl.NumberFormat('vi-VN').format(totalBalance)} VND**`);
       }
       lines.push('');
     }
@@ -122,9 +141,7 @@ export class ZaloBotCommandDispatcher {
   }
 
   private async handleUnlinkCommand(chatId: string): Promise<void> {
-    const settings = await prisma.notificationSetting.findMany({
-      where: { zaloBotChatId: chatId },
-    });
+    const settings = await zaloBotRepository.findUsersWithWalletsByChatId(chatId);
 
     if (!settings || settings.length === 0) {
       await zaloBotService.sendMessage(
@@ -135,7 +152,7 @@ export class ZaloBotCommandDispatcher {
     }
 
     for (const s of settings) {
-      await zaloBotLinkService.unlinkBot(s.userId);
+      await zaloBotLinkService.unlinkBot(s.user.id);
     }
 
     await zaloBotService.sendMessage(
@@ -146,47 +163,40 @@ export class ZaloBotCommandDispatcher {
   }
 
   private async handleHelpCommand(chatId: string, senderName: string): Promise<void> {
-    const count = await prisma.notificationSetting.count({
-      where: { zaloBotChatId: chatId },
-    });
-
-    const isLinked = count > 0;
+    const linkedUser = await this.findLinkedUser(chatId);
+    const isLinked = Boolean(linkedUser);
     const statusText = isLinked ? '✅ Đã liên kết FinWise' : '⚠️ Chưa liên kết';
 
     const text =
-      `🤖 **FINWISE BOT - TRỢ LÝ THÔNG BÁO TÀI CHÍNH**\n\n` +
+      `🤖 **FINWISE BOT - TRỢ LÝ TÀI CHÍNH CÁ NHÂN**\n\n` +
       `Xin chào **${senderName}**! Trạng thái: **${statusText}**\n\n` +
-      `📌 **Các lệnh hỗ trợ:**\n` +
-      `• **/status** : Báo cáo nhanh số dư các ví tài chính\n` +
-      `• **/link <mã>** : Liên kết tài khoản FinWise bằng mã 1 chạm (VD: /link FW-8492)\n` +
+      `📌 **Ghi chép nhanh (Fast-Entry):**\n` +
+      `Chỉ cần nhắn tin tự nhiên là bot tự ghi vào sổ kế toán cho bạn!\n` +
+      `• \`Cà phê sáng 35k ví tiền mặt\`\n` +
+      `• \`Ăn trưa 50k\` *(tự dùng ví mặc định)*\n` +
+      `• \`Vừa nhận lương 20tr ví VCB\`\n` +
+      `• \`Đổ xăng 200k ví MoMo\`\n\n` +
+      `✏️ **Sửa / Hoàn tác (trong vòng 15 phút):**\n` +
+      `• Gõ \`hoàn tác\` hoặc \`hủy\` để đảo ngược giao dịch vừa tạo\n` +
+      `• Gõ \`sửa thành 40k\` để đổi số tiền\n` +
+      `• Gõ \`đổi ví VCB\` để đổi ví thanh toán\n` +
+      `• Quote-Reply (trượt để trả lời) tin nhắn xác nhận bất kỳ lúc nào trong ngày\n\n` +
+      `📌 **Các lệnh khác:**\n` +
+      `• **/status** : Xem tổng số dư các ví\n` +
+      `• **/link <mã>** : Liên kết tài khoản FinWise (VD: /link FW-8492)\n` +
       `• **/unlink** : Hủy nhận thông báo trên Zalo này\n` +
-      `• **/help** : Xem hướng dẫn sử dụng bot\n\n` +
-      `✨ *Giai đoạn tiếp theo (Phase 3) sẽ hỗ trợ Trợ lý AI và truy vấn chi tiêu thông minh ngay tại đây!*`;
+      `• **/help** : Xem hướng dẫn sử dụng bot`;
 
     await zaloBotService.sendMessage(chatId, text);
   }
 
-  private async handleDefaultMessage(chatId: string, senderName: string): Promise<void> {
-    const count = await prisma.notificationSetting.count({
-      where: { zaloBotChatId: chatId },
-    });
+  // ─── Helper ──────────────────────────────────────────────────────────────────
 
-    if (count === 0) {
-      await zaloBotService.sendMessage(
-        chatId,
-        `Chào **${senderName}**! 👋\n\n` +
-        `Để nhận cảnh báo chi tiêu và nhắc nhở từ FinWise, bạn hãy mở **FinWise Mini App** → vào **Cài đặt thông báo** để lấy mã liên kết và gửi vào đây nhé!`,
-      );
-    } else {
-      await zaloBotService.sendMessage(
-        chatId,
-        `Chào **${senderName}**! FinWise Bot đã nhận được tin nhắn.\n\n` +
-        `Hiện tại bot đang hỗ trợ gửi cảnh báo và các lệnh tra cứu nhanh:\n` +
-        `• Gõ **/status** để xem tổng số dư\n` +
-        `• Gõ **/help** để xem danh sách lệnh\n\n` +
-        `*(Tính năng Trợ lý AI trò chuyện tự do sẽ sớm ra mắt trong bản nâng cấp Phase 3).*`,
-      );
-    }
+  /**
+   * Tìm userId FinWise tương ứng với chatId Zalo (kiểm tra liên kết).
+   */
+  private async findLinkedUser(chatId: string): Promise<{ userId: string } | null> {
+    return zaloBotRepository.findLinkedUserByChatId(chatId);
   }
 }
 

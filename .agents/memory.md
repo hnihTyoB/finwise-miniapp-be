@@ -61,6 +61,15 @@ File này chỉ lưu sự thật và quyết định dài hạn giúp các phiê
   Thông báo in-app và số lượng chưa đọc (`unread-count`) được phát thời gian thực tới client qua
   Server-Sent Events (`GET /api/v1/notifications/stream`), quản lý kết nối và phát sóng bởi
   `NotificationStreamService` (hỗ trợ Redis Pub/Sub đa instance và in-memory fallback).
+- Conversational Fast-Entry (Upgrade 8 — Ghi Chép Hội thoại 2 Chiều): Tích hợp `ZaloBotCommandDispatcher`
+  với `ZaloBotFastEntryService` để người dùng ghi chép giao dịch ngay trong chat Zalo.
+  Micro-Parser deterministic (`ZaloBotMicroParser`) phân tích NL → 4 ý định: CREATE_TRANSACTION,
+  PATCH_TRANSACTION (delta), UNDO_TRANSACTION, AMBIGUOUS. Tất cả ledger mutation đi qua
+  `TransactionService` (Serializable transaction, wallet balance). Context state (15 phút ngắn hạn
+  + 24 giờ Quote-Reply) lưu Redis/in-memory fallback qua `ZaloBotContextService` với key namespace
+  `zalo:ctx:{chatId}` và `zalo:msg_tx:{botMsgId}`. TransactionType enum chỉ có INCOME và EXPENSE
+  (Transfer dùng model riêng không hỗ trợ qua Bot). Deep Link [Sửa nhanh] trỏ vào
+  `ZALO_MINI_APP_DEEP_LINK_BASE?screen=transaction-edit&id=...&source=zalo_bot`.
 - Reminder hỗ trợ `ONCE`, `DAILY`, `WEEKLY`, `MONTHLY`, `YEARLY`, có khoảng lặp và ngày kết
   thúc. Worker nền trong process xử lý reminder, cảnh báo ngân sách/mục tiêu và retry delivery;
   có thể tắt hoặc chỉnh chu kỳ bằng các biến `NOTIFICATION_*`.

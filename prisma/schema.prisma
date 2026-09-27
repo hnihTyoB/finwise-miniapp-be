@@ -540,6 +540,7 @@ model NotificationSetting {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([zaloBotChatId])
   @@map("notification_settings")
 }
 

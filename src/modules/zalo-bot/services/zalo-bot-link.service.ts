@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { prisma } from '../../../database/prisma.client';
+import { zaloBotRepository } from '../zalo-bot.repository';
 import { cacheService } from '../../../common/services/cache.service';
 import { envConfig } from '../../../config/env.config';
 import { LoggerService } from '../../../common/services/logger.service';
@@ -59,48 +59,32 @@ export class ZaloBotLinkService {
       if (!fallbackUserId) {
         return { success: false, reason: 'INVALID_OR_EXPIRED_CODE' };
       }
-      return this.executeLink(fallbackUserId, rawCode, chatId, displayName);
+      return this.consumeCodeForUser(fallbackUserId, cleanCode, chatId, displayName);
     }
 
-    return this.executeLink(userId, cleanCode, chatId, displayName);
+    return this.consumeCodeForUser(userId, cleanCode, chatId, displayName);
   }
 
-  private async executeLink(
+  private async consumeCodeForUser(
     userId: string,
     code: string,
     chatId: string,
     displayName: string,
   ): Promise<{ success: boolean; reason?: string; userName?: string }> {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { fullName: true, email: true },
-    });
+    const user = await zaloBotRepository.getUserProfile(userId);
 
     if (!user) {
       return { success: false, reason: 'USER_NOT_FOUND' };
     }
 
     // Lấy setting hiện tại để gộp channel
-    const currentSetting = await prisma.notificationSetting.findUnique({
-      where: { userId },
-    });
+    const currentSetting = await zaloBotRepository.getNotificationSetting(userId);
 
     const currentChannels = currentSetting?.channels || [NotificationChannel.IN_APP];
     const newChannels = Array.from(new Set([...currentChannels, NotificationChannel.ZALO]));
 
-    // Cập nhật setting
-    await prisma.notificationSetting.upsert({
-      where: { userId },
-      create: {
-        userId,
-        zaloBotChatId: chatId,
-        channels: newChannels,
-      },
-      update: {
-        zaloBotChatId: chatId,
-        channels: newChannels,
-      },
-    });
+    // Cập nhật setting qua repository
+    await zaloBotRepository.upsertNotificationSettingLink(userId, chatId, newChannels);
 
     // Xóa mã liên kết đã dùng khỏi cache
     await cacheService.del(`zalo:link:code:${code}`);
@@ -122,10 +106,7 @@ export class ZaloBotLinkService {
     zaloBotChatId: string | null;
     channels: string[];
   }> {
-    const setting = await prisma.notificationSetting.findUnique({
-      where: { userId },
-      select: { zaloBotChatId: true, channels: true },
-    });
+    const setting = await zaloBotRepository.getNotificationSetting(userId);
 
     const isLinked = Boolean(
       setting?.zaloBotChatId && setting.channels.includes(NotificationChannel.ZALO),
@@ -142,9 +123,7 @@ export class ZaloBotLinkService {
    * Hủy liên kết Zalo Bot cho người dùng.
    */
   async unlinkBot(userId: string): Promise<{ success: boolean }> {
-    const setting = await prisma.notificationSetting.findUnique({
-      where: { userId },
-    });
+    const setting = await zaloBotRepository.getNotificationSetting(userId);
 
     if (setting) {
       const filteredChannels = setting.channels.filter(
@@ -153,13 +132,7 @@ export class ZaloBotLinkService {
       // Đảm bảo tối thiểu còn 1 channel
       const updatedChannels = filteredChannels.length > 0 ? filteredChannels : [NotificationChannel.IN_APP];
 
-      await prisma.notificationSetting.update({
-        where: { userId },
-        data: {
-          zaloBotChatId: null,
-          channels: updatedChannels,
-        },
-      });
+      await zaloBotRepository.clearZaloBotChatId(userId, updatedChannels);
     }
 
     this.logger.info(`Unlinked Zalo Bot for user ${userId}`);
