@@ -181,7 +181,7 @@ export class ZaloBotCommandDispatcher {
     const text =
       `🤖 **FINWISE BOT - TRỢ LÝ TÀI CHÍNH CÁ NHÂN**\n\n` +
       `Xin chào **${senderName}**! Trạng thái: **${statusText}**\n\n` +
-      `📌 **Ghi chép nhanh (Fast-Entry):**\n` +
+      `📌 **Ghi chép nhanh:**\n` +
       `Chỉ cần nhắn tin tự nhiên là bot tự ghi vào sổ kế toán cho bạn!\n` +
       `• \`Cà phê sáng 35k ví tiền mặt\`\n` +
       `• \`Ăn trưa 50k\` *(tự dùng ví mặc định)*\n` +
@@ -190,8 +190,7 @@ export class ZaloBotCommandDispatcher {
       `✏️ **Sửa / Hoàn tác (trong vòng 15 phút):**\n` +
       `• Gõ \`hoàn tác\` hoặc \`hủy\` để đảo ngược giao dịch vừa tạo\n` +
       `• Gõ \`sửa thành 40k\` để đổi số tiền\n` +
-      `• Gõ \`đổi ví VCB\` để đổi ví thanh toán\n` +
-      `• Quote-Reply (trượt để trả lời) tin nhắn xác nhận bất kỳ lúc nào trong ngày\n\n` +
+      `• Gõ \`đổi ví VCB\` để đổi ví thanh toán\n\n` +
       `📌 **Các lệnh khác:**\n` +
       `• **/status** : Xem tổng số dư các ví\n` +
       `• **/link <mã>** : Liên kết tài khoản FinWise (VD: /link FW-8492)\n` +
