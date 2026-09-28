@@ -7,6 +7,9 @@ import {
 } from '../src/modules/zalo-bot/services/zalo-bot-micro-parser';
 import { BotConversationContext } from '../src/modules/zalo-bot/services/zalo-bot-fast-entry.dto';
 import { zaloWebhookPayloadSchema } from '../src/modules/zalo-bot/zalo-bot.validation';
+import { zaloBotContextService } from '../src/modules/zalo-bot/services/zalo-bot-context.service';
+import { zaloBotFastEntryService } from '../src/modules/zalo-bot/services/zalo-bot-fast-entry.service';
+import { zaloBotRepository } from '../src/modules/zalo-bot/zalo-bot.repository';
 
 describe('Zalo Bot Fast-Entry Parser & Safeguards', () => {
   const mockEntityContext: EntityContext = {
@@ -390,6 +393,188 @@ describe('Zalo Bot Fast-Entry Parser & Safeguards', () => {
 
       const parsed = zaloWebhookPayloadSchema.safeParse(payload);
       expect(parsed.success).toBe(true);
+    });
+  });
+
+  describe('Quote-Reply Multi-Message Targeting vs Latest Chat Context', () => {
+    const chatId = 'chat-target-test-1';
+    const userId = 'user-target-test-1';
+
+    beforeEach(async () => {
+      // Clear test chat context
+      await zaloBotContextService.clearContext(chatId);
+    });
+
+    it('correctly maps both user message ID and bot confirmation message ID to transactionId', async () => {
+      await zaloBotContextService.saveMsgToTx('user-msg-001', 'tx-test-101', userId);
+      await zaloBotContextService.saveMsgToTx('bot-msg-001', 'tx-test-101', userId);
+
+      const fromUser = await zaloBotContextService.getTxFromMsg('user-msg-001');
+      const fromBot = await zaloBotContextService.getTxFromMsg('bot-msg-001');
+
+      expect(fromUser).toEqual({ transactionId: 'tx-test-101', userId });
+      expect(fromBot).toEqual({ transactionId: 'tx-test-101', userId });
+    });
+
+    it('undoes Message #1 when user quote-replies to Message #1 in a 3-message sequence', async () => {
+      // Giả lập chuỗi 3 giao dịch được gửi liên tiếp:
+      // Tin 1: Cà phê 30k -> tx-1
+      await zaloBotContextService.saveMsgToTx('user-m1', 'tx-1', userId);
+      await zaloBotContextService.saveMsgToTx('bot-m1', 'tx-1', userId);
+      await zaloBotContextService.saveContext(chatId, {
+        lastTransactionId: 'tx-1',
+        userId,
+        createdAt: Date.now(),
+      });
+
+      // Tin 2: Ăn trưa 50k -> tx-2
+      await zaloBotContextService.saveMsgToTx('user-m2', 'tx-2', userId);
+      await zaloBotContextService.saveMsgToTx('bot-m2', 'tx-2', userId);
+      await zaloBotContextService.saveContext(chatId, {
+        lastTransactionId: 'tx-2',
+        userId,
+        createdAt: Date.now(),
+      });
+
+      // Tin 3: Đổ xăng 70k -> tx-3 (đây là context gần nhất của chat)
+      await zaloBotContextService.saveMsgToTx('user-m3', 'tx-3', userId);
+      await zaloBotContextService.saveMsgToTx('bot-m3', 'tx-3', userId);
+      await zaloBotContextService.saveContext(chatId, {
+        lastTransactionId: 'tx-3',
+        userId,
+        createdAt: Date.now(),
+      });
+
+      // ── Tình huống 1: Người dùng Quote-Reply tin nhắn #1 (hoặc bot reply của tin 1) với "hoàn tác" ──
+      // Context resolver phải tra cứu theo replyMsgId và tìm thấy tx-1, TUYỆT ĐỐI KHÔNG lấy tx-3!
+      const ctxForReply1 = await (zaloBotFastEntryService as any).resolveConversationContext(
+        chatId,
+        'user-m1',
+      );
+      expect(ctxForReply1).not.toBeNull();
+      expect(ctxForReply1?.lastTransactionId).toBe('tx-1');
+
+      const undoIntent1 = ZaloBotMicroParser.parse('hoàn tác', mockEntityContext, ctxForReply1, true);
+      expect(undoIntent1.action).toBe('UNDO_TRANSACTION');
+      if (undoIntent1.action === 'UNDO_TRANSACTION') {
+        expect(undoIntent1.transactionId).toBe('tx-1'); // Hoàn tác đúng tin 1, KHÔNG PHẢI tin 3!
+      }
+
+      // ── Tình huống 2: Người dùng Quote-Reply tin nhắn #1 với "sửa thành 35k" ──
+      const patchIntent1 = ZaloBotMicroParser.parse('sửa thành 35k', mockEntityContext, ctxForReply1, true);
+      expect(patchIntent1.action).toBe('PATCH_TRANSACTION');
+      if (patchIntent1.action === 'PATCH_TRANSACTION') {
+        expect(patchIntent1.transactionId).toBe('tx-1');
+        expect(patchIntent1.amount).toBe(35000);
+      }
+
+      // ── Tình huống 3: Người dùng Quote-Reply tin nhắn #2 với "đổi ví VCB" ──
+      const ctxForReply2 = await (zaloBotFastEntryService as any).resolveConversationContext(
+        chatId,
+        'bot-m2',
+      );
+      expect(ctxForReply2?.lastTransactionId).toBe('tx-2');
+
+      const patchIntent2 = ZaloBotMicroParser.parse('đổi ví VCB', mockEntityContext, ctxForReply2, true);
+      expect(patchIntent2.action).toBe('PATCH_TRANSACTION');
+      if (patchIntent2.action === 'PATCH_TRANSACTION') {
+        expect(patchIntent2.transactionId).toBe('tx-2');
+        expect(patchIntent2.walletId).toBe('wallet-2');
+      }
+
+      // ── Tình huống 4: Người dùng KHÔNG Quote-Reply mà gõ thẳng "hoàn tác" ──
+      // Lúc này mới fallback về context gần nhất của chat (tx-3)
+      const ctxNormal = await (zaloBotFastEntryService as any).resolveConversationContext(
+        chatId,
+        undefined, // không quote-reply
+      );
+      expect(ctxNormal?.lastTransactionId).toBe('tx-3');
+
+      const undoIntentNormal = ZaloBotMicroParser.parse('hoàn tác', mockEntityContext, ctxNormal, false);
+      expect(undoIntentNormal.action).toBe('UNDO_TRANSACTION');
+      if (undoIntentNormal.action === 'UNDO_TRANSACTION') {
+        expect(undoIntentNormal.transactionId).toBe('tx-3');
+      }
+    });
+
+    it('does NOT fallback to chat context when quote-replying to an unknown/unrelated message', async () => {
+      // Đặt context chat hiện tại là tx-999
+      await zaloBotContextService.saveContext(chatId, {
+        lastTransactionId: 'tx-999',
+        userId,
+        createdAt: Date.now(),
+      });
+
+      // Người dùng quote một tin nhắn không có trong hệ thống (vd tin nhắn tán gẫu của bạn bè)
+      const ctxUnrelated = await (zaloBotFastEntryService as any).resolveConversationContext(
+        chatId,
+        'unrelated-msg-id',
+      );
+
+      // Phải trả về null, KHÔNG ĐƯỢC fallback về tx-999
+      expect(ctxUnrelated).toBeNull();
+    });
+
+    it('rejects undo/patch safely when quote-reply target message is unlinked without corrupting chat context', async () => {
+      // Mock repository and transactions to prevent DB calls
+      jest.spyOn(zaloBotRepository, 'loadUserEntities').mockResolvedValue({
+        categories: mockEntityContext.categories as any,
+        wallets: mockEntityContext.wallets as any,
+      });
+
+      // Đặt context chat gần nhất là tx-active
+      await zaloBotContextService.saveContext(chatId, {
+        lastTransactionId: 'tx-active',
+        userId,
+        createdAt: Date.now(),
+      });
+
+      // User quote một tin không tồn tại và gõ "hoàn tác"
+      const res = await zaloBotFastEntryService.handleMessage(
+        chatId,
+        userId,
+        'hoàn tác',
+        'non-existent-msg-id',
+      );
+
+      expect(res.replyText).toContain('Không tìm thấy giao dịch liên kết với tin nhắn bạn đang trả lời');
+
+      // Đảm bảo tx-active trong chat context không bị xóa hay ảnh hưởng
+      const activeCtx = await zaloBotContextService.getContext(chatId);
+      expect(activeCtx?.lastTransactionId).toBe('tx-active');
+    });
+
+    it('still creates a new transaction when user quote-replies to an unlinked message with a full expense', async () => {
+      jest.spyOn(zaloBotRepository, 'loadUserEntities').mockResolvedValue({
+        categories: mockEntityContext.categories as any,
+        wallets: mockEntityContext.wallets as any,
+      });
+      jest.spyOn((zaloBotFastEntryService as any).transactionService, 'create').mockResolvedValue({
+        id: 'new-tx-created',
+      });
+      jest.spyOn(zaloBotRepository, 'getWallet').mockResolvedValue({
+        id: 'wallet-1',
+        name: 'Tiền mặt',
+        balance: 1000000,
+        currency: 'VND',
+      } as any);
+      jest.spyOn(zaloBotRepository, 'findCategoryBudget').mockResolvedValue(null);
+
+      // User quote một tin nhắn không phải tx (vd ảnh hóa đơn) và nhập "Ăn trưa 50k"
+      const res = await zaloBotFastEntryService.handleMessage(
+        chatId,
+        userId,
+        'Ăn trưa 50k',
+        'unlinked-photo-msg',
+        'user-new-msg',
+      );
+
+      expect(res.transactionId).toBe('new-tx-created');
+      expect(res.replyText).toContain('GHI NHẬN CHI TIÊU THÀNH CÔNG');
+
+      // Tin nhắn người dùng vừa gửi phải được liên kết với giao dịch mới
+      const userMsgMapping = await zaloBotContextService.getTxFromMsg('user-new-msg');
+      expect(userMsgMapping?.transactionId).toBe('new-tx-created');
     });
   });
 });

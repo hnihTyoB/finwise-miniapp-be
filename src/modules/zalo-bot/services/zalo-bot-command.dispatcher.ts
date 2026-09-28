@@ -2,6 +2,7 @@ import { zaloBotRepository } from '../zalo-bot.repository';
 import { zaloBotService } from '../../../common/services/zalo-bot.service';
 import { zaloBotLinkService } from './zalo-bot-link.service';
 import { zaloBotFastEntryService } from './zalo-bot-fast-entry.service';
+import { zaloBotContextService } from './zalo-bot-context.service';
 import { LoggerService } from '../../../common/services/logger.service';
 
 export class ZaloBotCommandDispatcher {
@@ -17,8 +18,9 @@ export class ZaloBotCommandDispatcher {
     senderName: string;
     text: string;
     replyToMsgId?: string;
+    userMessageId?: string;
   }): Promise<void> {
-    const { chatId, senderName, text, replyToMsgId } = payload;
+    const { chatId, senderName, text, replyToMsgId, userMessageId } = payload;
     const trimmed = text.trim();
     const lower = trimmed.toLowerCase();
 
@@ -67,13 +69,19 @@ export class ZaloBotCommandDispatcher {
     }
 
     // 6. Tài khoản đã liên kết → Conversational Fast-Entry
-    const reply = await zaloBotFastEntryService.handleMessage(
+    const { replyText, transactionId } = await zaloBotFastEntryService.handleMessage(
       chatId,
       linkedUser.userId,
       trimmed,
       replyToMsgId,
+      userMessageId,
     );
-    await zaloBotService.sendMessage(chatId, reply);
+    const sent = await zaloBotService.sendMessage(chatId, replyText);
+
+    // Lưu ánh xạ message_id Bot vừa gửi → transactionId (24h) để người dùng có thể Quote-Reply chính xác
+    if (sent?.messageId && transactionId) {
+      await zaloBotContextService.saveMsgToTx(sent.messageId, transactionId, linkedUser.userId);
+    }
   }
 
   // ─── Lệnh quản lý Bot ────────────────────────────────────────────────────────

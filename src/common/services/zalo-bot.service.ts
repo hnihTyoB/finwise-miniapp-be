@@ -49,7 +49,7 @@ export class ZaloBotService {
    * @param text    - Nội dung tin nhắn, hỗ trợ Zalo Markdown syntax
    * @throws        Error nếu API trả về ok=false hoặc HTTP lỗi
    */
-  async sendMessage(chatId: string, text: string): Promise<void> {
+  async sendMessage(chatId: string, text: string): Promise<{ messageId?: string }> {
     const url = `${this.apiBase}/bot${this.token}/sendMessage`;
 
     let response = await fetch(url, {
@@ -63,7 +63,12 @@ export class ZaloBotService {
       signal: AbortSignal.timeout(this.timeoutMs),
     });
 
-    let data = (await response.json().catch(() => ({}))) as { ok: boolean; description?: string };
+    let data = (await response.json().catch(() => ({}))) as {
+      ok: boolean;
+      description?: string;
+      result?: { message_id?: string | number; id?: string | number };
+      message_id?: string | number;
+    };
 
     // Nếu Zalo trả về lỗi do parse markdown không hợp lệ, thử gửi lại dưới dạng plain text
     if (!data.ok) {
@@ -76,7 +81,12 @@ export class ZaloBotService {
         }),
         signal: AbortSignal.timeout(this.timeoutMs),
       });
-      data = (await response.json().catch(() => ({}))) as { ok: boolean; description?: string };
+      data = (await response.json().catch(() => ({}))) as {
+        ok: boolean;
+        description?: string;
+        result?: { message_id?: string | number; id?: string | number };
+        message_id?: string | number;
+      };
     }
 
     if (!data.ok) {
@@ -84,6 +94,9 @@ export class ZaloBotService {
         `Zalo Bot sendMessage failed: ${data.description ?? 'unknown error'}`,
       );
     }
+
+    const rawId = data.result?.message_id ?? data.result?.id ?? data.message_id;
+    return { messageId: rawId ? String(rawId) : undefined };
   }
 
   /**

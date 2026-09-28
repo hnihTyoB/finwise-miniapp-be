@@ -19,9 +19,6 @@ import {
   UndoIntent,
 } from './zalo-bot-fast-entry.dto';
 
-/** URL base của Mini App (cấu hình qua env hoặc fallback). */
-const MINI_APP_DEEP_LINK_BASE =
-  process.env.ZALO_MINI_APP_DEEP_LINK_BASE ?? 'https://zalo.me/s/finwise';
 
 /**
  * Orchestration service cho Conversational Fast-Entry.
@@ -42,14 +39,16 @@ export class ZaloBotFastEntryService {
    * @param userId        - userId FinWise đã xác thực qua NotificationSetting
    * @param text          - Nội dung tin nhắn thô
    * @param replyMsgId    - message_id tin nhắn Bot mà người dùng đang quote-reply (nếu có)
-   * @returns             - Chuỗi Markdown để gửi về cho người dùng
+   * @param userMsgId     - message_id tin nhắn của người dùng gửi lên (nếu có)
+   * @returns             - Chuỗi Markdown và transactionId (nếu tạo/sửa thành công)
    */
   async handleMessage(
     chatId: string,
     userId: string,
     text: string,
     replyMsgId?: string,
-  ): Promise<string> {
+    userMsgId?: string,
+  ): Promise<{ replyText: string; transactionId?: string }> {
     try {
       const isQuoteReply = Boolean(replyMsgId);
 
@@ -66,12 +65,27 @@ export class ZaloBotFastEntryService {
         isQuoteReply,
       });
 
+      // Nếu người dùng chủ động Quote-Reply (định sửa hoặc hoàn tác) nhưng tin nhắn được quote không gắn với giao dịch hợp lệ nào
+      if (isQuoteReply && !botCtx && intent.action !== 'CREATE_TRANSACTION') {
+        return {
+          replyText:
+            '❌ **Không tìm thấy giao dịch liên kết với tin nhắn bạn đang trả lời** (giao dịch có thể đã được hoàn tác trước đó hoặc đã quá 24 giờ).',
+        };
+      }
+
       // Bước 3: Thực thi ý định
-      return await this.executeIntent(intent, chatId, userId, entityCtx);
+      const executionResult = await this.executeIntent(intent, chatId, userId, entityCtx);
+
+      // Nếu có userMsgId và có giao dịch được tạo/sửa, lưu ánh xạ userMsgId → transactionId
+      if (userMsgId && executionResult.transactionId) {
+        await zaloBotContextService.saveMsgToTx(userMsgId, executionResult.transactionId, userId);
+      }
+
+      return executionResult;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.error(`FastEntry error for chat ${chatId}:`, err);
-      return this.buildErrorCard(message);
+      return { replyText: this.buildErrorCard(message) };
     }
   }
 
@@ -82,7 +96,7 @@ export class ZaloBotFastEntryService {
     chatId: string,
     userId: string,
     entityCtx: EntityContext,
-  ): Promise<string> {
+  ): Promise<{ replyText: string; transactionId?: string }> {
     switch (intent.action) {
       case 'CREATE_TRANSACTION':
         return this.executeCreate(intent as MutationAST, chatId, userId, entityCtx);
@@ -95,7 +109,7 @@ export class ZaloBotFastEntryService {
 
       case 'AMBIGUOUS':
       default:
-        return this.buildAmbiguousCard(intent as AmbiguousIntent, entityCtx);
+        return { replyText: this.buildAmbiguousCard(intent as AmbiguousIntent, entityCtx) };
     }
   }
 
@@ -106,7 +120,7 @@ export class ZaloBotFastEntryService {
     chatId: string,
     userId: string,
     _entityCtx: EntityContext,
-  ): Promise<string> {
+  ): Promise<{ replyText: string; transactionId: string }> {
     const today = instantToBusinessDate(new Date());
     const amountStr = ast.amount.toString();
 
@@ -148,7 +162,10 @@ export class ZaloBotFastEntryService {
       budget: budgetInfo,
     };
 
-    return this.buildSuccessCard(result, created.id);
+    return {
+      replyText: this.buildSuccessCard(result, created.id),
+      transactionId: created.id,
+    };
   }
 
   // ─── PATCH TRANSACTION ────────────────────────────────────────────────────────
@@ -157,12 +174,14 @@ export class ZaloBotFastEntryService {
     ast: DeltaPatchAST,
     chatId: string,
     userId: string,
-  ): Promise<string> {
+  ): Promise<{ replyText: string; transactionId?: string }> {
     // Kiểm tra ownership qua repository
     const current = await zaloBotRepository.getTransactionWithDetails(ast.transactionId, userId);
 
     if (!current) {
-      return '❌ **Không tìm thấy giao dịch cần sửa** hoặc giao dịch không thuộc về bạn.';
+      return {
+        replyText: '❌ **Không tìm thấy giao dịch cần sửa** hoặc giao dịch không thuộc về bạn.',
+      };
     }
 
     // Cập nhật qua TransactionService để đảm bảo số dư ví đảo ngược/áp dụng đúng
@@ -204,15 +223,18 @@ export class ZaloBotFastEntryService {
       changeLines.push(`• Loại: **${this.formatType(ast.type)}**`);
     }
 
-    return [
-      `✏️ **ĐÃ CẬP NHẬT GIAO DỊCH!**`,
-      ``,
-      ...changeLines,
-      `• Số dư ví mới: **${this.formatMoney(newBalance)} ${currency}**`,
-      ``,
-      `━━━━━━━━━━━━━━━━━━━━`,
-      `⚡ *Gõ /undo hoặc "hoàn tác" để đảo ngược trong vòng 15 phút.*`,
-    ].join('\n');
+    return {
+      replyText: [
+        `✏️ **ĐÃ CẬP NHẬT GIAO DỊCH!**`,
+        ``,
+        ...changeLines,
+        `• Số dư ví mới: **${this.formatMoney(newBalance)} ${currency}**`,
+        ``,
+        `━━━━━━━━━━━━━━━━━━━━`,
+        `⚡ *Gõ /undo hoặc "hoàn tác" để đảo ngược trong vòng 15 phút.*`,
+      ].join('\n'),
+      transactionId: ast.transactionId,
+    };
   }
 
   // ─── UNDO TRANSACTION ─────────────────────────────────────────────────────────
@@ -221,12 +243,14 @@ export class ZaloBotFastEntryService {
     intent: UndoIntent,
     chatId: string,
     userId: string,
-  ): Promise<string> {
+  ): Promise<{ replyText: string }> {
     // Kiểm tra ownership qua repository
     const tx = await zaloBotRepository.getTransactionWithDetails(intent.transactionId, userId);
 
     if (!tx) {
-      return '❌ **Không tìm thấy giao dịch để hoàn tác** hoặc bạn không có quyền trên giao dịch này.';
+      return {
+        replyText: '❌ **Không tìm thấy giao dịch để hoàn tác** hoặc bạn không có quyền trên giao dịch này.',
+      };
     }
 
     const amount = Number(tx.amount);
@@ -249,13 +273,15 @@ export class ZaloBotFastEntryService {
         ? 'đã được điều chỉnh giảm'
         : 'đã được hoàn lại';
 
-    return [
-      `↩️ **ĐÃ HOÀN TÁC GIAO DỊCH THÀNH CÔNG!**`,
-      ``,
-      `• Đã xóa: **${formatCategoryDisplayName(categoryName)}** — **${this.formatMoney(amount)} ${currency}**`,
-      `• Ví **${walletName}** ${actionText} **${this.formatMoney(amount)} ${currency}**`,
-      `• Số dư hiện tại: **${this.formatMoney(newBalance)} ${currency}**`,
-    ].join('\n');
+    return {
+      replyText: [
+        `↩️ **ĐÃ HOÀN TÁC GIAO DỊCH THÀNH CÔNG!**`,
+        ``,
+        `• Đã xóa: **${formatCategoryDisplayName(categoryName)}** — **${this.formatMoney(amount)} ${currency}**`,
+        `• Ví **${walletName}** ${actionText} **${this.formatMoney(amount)} ${currency}**`,
+        `• Số dư hiện tại: **${this.formatMoney(newBalance)} ${currency}**`,
+      ].join('\n'),
+    };
   }
 
   // ─── AMBIGUOUS ────────────────────────────────────────────────────────────────
@@ -351,9 +377,7 @@ export class ZaloBotFastEntryService {
 
     lines.push(``);
     lines.push(`━━━━━━━━━━━━━━━━━━━━`);
-    lines.push(`⚡ **THAO TÁC NHANH:**`);
-    lines.push(`👉 [Mở Mini App sửa giao dịch này](${MINI_APP_DEEP_LINK_BASE}?screen=transaction-edit&id=${txId}&source=zalo_bot)`);
-    lines.push(`💬 *Hoặc gõ "hoàn tác" / "sửa thành Xk" ngay trong chat này (trong vòng 15 phút).*`);
+    lines.push(`⚡ *Gõ "hoàn tác" hoặc "sửa thành Xk" để điều chỉnh trong vòng 15 phút.*`);
 
     return lines.join('\n');
   }
@@ -422,6 +446,8 @@ export class ZaloBotFastEntryService {
 
   /**
    * Ưu tiên: Quote-Reply (24h) > Chat nối tiếp (15 phút)
+   * Khi người dùng Quote-Reply vào một tin nhắn cụ thể, chỉ tra cứu theo ID tin nhắn đó.
+   * Tuyệt đối không fallback về getContext(chatId) vì sẽ sửa/hoàn tác nhầm tin nhắn gần nhất!
    */
   private async resolveConversationContext(
     chatId: string,
@@ -436,6 +462,7 @@ export class ZaloBotFastEntryService {
           createdAt: Date.now(),
         };
       }
+      return null;
     }
     return zaloBotContextService.getContext(chatId);
   }

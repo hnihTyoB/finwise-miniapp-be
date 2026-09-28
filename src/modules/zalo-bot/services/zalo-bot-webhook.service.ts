@@ -90,6 +90,7 @@ export class ZaloBotWebhookService {
         senderName,
         text,
         replyToMsgId,
+        userMessageId: messageId,
       });
     } catch (err: unknown) {
       this.logger.error(`Error processing message from chat ${maskedChatId}:`, err);
