@@ -310,10 +310,17 @@ export class ZaloBotWebhookService {
     });
 
     if (!replyToMsgId) {
-      this.logger.debug('No quote-reply detected for message', {
+      // Log INFO để debug trong production — không log giá trị PII, chỉ log tên keys
+      const payloadKeys = payload && typeof payload === 'object' ? Object.keys(payload as object) : [];
+      const messageKeys = rawMessage && typeof rawMessage === 'object' ? Object.keys(rawMessage as object) : [];
+      const resultKeys = (payload as Record<string, unknown>)?.result && typeof (payload as Record<string, unknown>).result === 'object'
+        ? Object.keys((payload as Record<string, unknown>).result as object)
+        : [];
+      this.logger.info('No quote-reply detected — payload structure for diagnosis', {
         messageId,
-        availablePayloadKeys: payload && typeof payload === 'object' ? Object.keys(payload as object) : [],
-        availableMessageKeys: rawMessage && typeof rawMessage === 'object' ? Object.keys(rawMessage as object) : [],
+        payloadKeys,
+        resultKeys,
+        messageKeys,
       });
     }
 
