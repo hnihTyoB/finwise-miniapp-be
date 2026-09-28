@@ -95,7 +95,16 @@ export class ZaloBotService {
       );
     }
 
-    const rawId = data.result?.message_id ?? data.result?.id ?? data.message_id;
+    const rawId =
+      data.result?.message_id ??
+      data.result?.id ??
+      (data.result as any)?.msg_id ??
+      (data.result as any)?.message?.message_id ??
+      (data.result as any)?.message?.id ??
+      (data.result as any)?.message?.msg_id ??
+      data.message_id ??
+      (data as any).id ??
+      (data as any).msg_id;
     return { messageId: rawId ? String(rawId) : undefined };
   }
 

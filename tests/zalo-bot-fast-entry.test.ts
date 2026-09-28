@@ -10,6 +10,8 @@ import { zaloWebhookPayloadSchema } from '../src/modules/zalo-bot/zalo-bot.valid
 import { zaloBotContextService } from '../src/modules/zalo-bot/services/zalo-bot-context.service';
 import { zaloBotFastEntryService } from '../src/modules/zalo-bot/services/zalo-bot-fast-entry.service';
 import { zaloBotRepository } from '../src/modules/zalo-bot/zalo-bot.repository';
+import { zaloBotWebhookService } from '../src/modules/zalo-bot/services/zalo-bot-webhook.service';
+import { zaloBotCommandDispatcher } from '../src/modules/zalo-bot/services/zalo-bot-command.dispatcher';
 
 describe('Zalo Bot Fast-Entry Parser & Safeguards', () => {
   const mockEntityContext: EntityContext = {
@@ -393,6 +395,80 @@ describe('Zalo Bot Fast-Entry Parser & Safeguards', () => {
 
       const parsed = zaloWebhookPayloadSchema.safeParse(payload);
       expect(parsed.success).toBe(true);
+    });
+
+    it('successfully parses Telegram/Zalo Bot standard reply_to_message with numeric message_id', () => {
+      const payload = {
+        ok: true,
+        result: {
+          event_name: 'message.text.received',
+          message: {
+            message_id: 123456,
+            text: 'hoàn tác',
+            chat: { id: 789012 },
+            from: { id: 789012, display_name: 'Tran B' },
+            reply_to_message: {
+              message_id: 10001,
+              text: 'Cà phê sáng 35k ví tiền mặt',
+            },
+          },
+        },
+      };
+
+      const parsed = zaloWebhookPayloadSchema.safeParse(payload);
+      expect(parsed.success).toBe(true);
+    });
+
+    it('successfully parses Zalo OA standard quote_message_id', () => {
+      const payload = {
+        ok: true,
+        result: {
+          event_name: 'message.text.received',
+          message: {
+            msg_id: 'msg-002',
+            text: 'sửa thành 50k',
+            chat_id: 'chat-456',
+            from_id: 'user-789',
+            quote_message_id: 'quoted-bot-msg-999',
+          },
+        },
+      };
+
+      const parsed = zaloWebhookPayloadSchema.safeParse(payload);
+      expect(parsed.success).toBe(true);
+    });
+
+    it('zaloBotWebhookService extracts replyToMsgId from reply_to_message correctly and passes to dispatcher', async () => {
+      const dispatchSpy = jest.spyOn(zaloBotCommandDispatcher, 'dispatch').mockResolvedValue(undefined);
+
+      const payload = {
+        ok: true,
+        result: {
+          event_name: 'message.text.received',
+          message: {
+            message_id: 'msg-unique-test-1',
+            text: 'hoàn tác',
+            chat: { id: 'chat-webhook-test' },
+            from: { id: 'user-webhook-test', display_name: 'Nguyen Test' },
+            reply_to_message: {
+              message_id: 'original-tx-msg-001',
+            },
+          },
+        },
+      };
+
+      await zaloBotWebhookService.processWebhook(payload);
+
+      expect(dispatchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          chatId: 'chat-webhook-test',
+          text: 'hoàn tác',
+          replyToMsgId: 'original-tx-msg-001',
+          userMessageId: 'msg-unique-test-1',
+        }),
+      );
+
+      dispatchSpy.mockRestore();
     });
   });
 

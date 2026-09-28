@@ -45,7 +45,17 @@ export class ZaloBotWebhookService {
       return;
     }
 
-    const messageId = message.message_id || message.id;
+    const rawMsgId =
+      message.message_id ??
+      message.id ??
+      (message as any).msg_id ??
+      (rawResult as any).message_id ??
+      (rawResult as any).msg_id;
+    const messageId =
+      rawMsgId !== undefined && rawMsgId !== null && String(rawMsgId).trim() !== ''
+        ? String(rawMsgId)
+        : undefined;
+
     if (messageId) {
       // Kiểm tra deduplication chống xử lý lặp
       const dedupKey = `zalo:dedup:${messageId}`;
@@ -63,12 +73,40 @@ export class ZaloBotWebhookService {
     const senderName = message.from?.display_name || message.from?.name || 'Người dùng';
     const text = message.text || message.caption || '';
 
-    // Trích xuất message_id của tin nhắn Bot mà user đang quote-reply (nếu có).
+    // Trích xuất message_id của tin nhắn mà user đang quote-reply (nếu có).
+    // Hỗ trợ tất cả chuẩn: Zalo Bot Platform (reply_to_message), Zalo OA (quote_message_id), legacy (replied_to_message, quote)
+    const rawReply =
+      (message as any).reply_to_message ??
+      message.replied_to_message ??
+      (message as any).quote ??
+      (message as any).quoted_message ??
+      (rawResult as any).reply_to_message ??
+      (rawResult as any).replied_to_message;
+
+    let rawReplyId: unknown = undefined;
+    if (rawReply && typeof rawReply === 'object') {
+      rawReplyId =
+        (rawReply as any).message_id ??
+        (rawReply as any).id ??
+        (rawReply as any).msg_id;
+    } else if (typeof rawReply === 'string' || typeof rawReply === 'number') {
+      rawReplyId = rawReply;
+    }
+
+    if (rawReplyId === undefined || rawReplyId === null || String(rawReplyId).trim() === '') {
+      rawReplyId =
+        (message as any).reply_to_message_id ??
+        (message as any).reply_to_msg_id ??
+        (message as any).quote_message_id ??
+        (message as any).quote_msg_id ??
+        (rawResult as any).reply_to_message_id ??
+        (rawResult as any).quote_message_id;
+    }
+
     const replyToMsgId: string | undefined =
-      message.replied_to_message?.message_id ||
-      message.replied_to_message?.id ||
-      message.reply_to_message_id ||
-      undefined;
+      rawReplyId !== undefined && rawReplyId !== null && String(rawReplyId).trim() !== ''
+        ? String(rawReplyId)
+        : undefined;
 
     if (!chatId) {
       this.logger.warn('Could not extract chatId from message payload');

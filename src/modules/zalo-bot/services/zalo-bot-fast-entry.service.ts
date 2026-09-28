@@ -265,8 +265,11 @@ export class ZaloBotFastEntryService {
     const wallet = await zaloBotRepository.getWallet(tx.walletId, userId);
     const newBalance = wallet ? Number(wallet.balance) : 0;
 
-    // Xóa context để tránh double-undo
-    await zaloBotContextService.clearContext(chatId);
+    // Nếu giao dịch vừa hoàn tác chính là giao dịch gần nhất của chat, xóa context để tránh double-undo
+    const currentChatCtx = await zaloBotContextService.getContext(chatId);
+    if (currentChatCtx?.lastTransactionId === intent.transactionId) {
+      await zaloBotContextService.clearContext(chatId);
+    }
 
     const actionText =
       tx.type === TransactionType.INCOME
