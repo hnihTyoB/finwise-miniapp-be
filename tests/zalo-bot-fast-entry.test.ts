@@ -10,7 +10,10 @@ import { zaloWebhookPayloadSchema } from '../src/modules/zalo-bot/zalo-bot.valid
 import { zaloBotContextService } from '../src/modules/zalo-bot/services/zalo-bot-context.service';
 import { zaloBotFastEntryService } from '../src/modules/zalo-bot/services/zalo-bot-fast-entry.service';
 import { zaloBotRepository } from '../src/modules/zalo-bot/zalo-bot.repository';
-import { zaloBotWebhookService } from '../src/modules/zalo-bot/services/zalo-bot-webhook.service';
+import {
+  extractReplyToMsgId,
+  zaloBotWebhookService,
+} from '../src/modules/zalo-bot/services/zalo-bot-webhook.service';
 import { zaloBotCommandDispatcher } from '../src/modules/zalo-bot/services/zalo-bot-command.dispatcher';
 import { cacheService } from '../src/common/services/cache.service';
 
@@ -439,6 +442,58 @@ describe('Zalo Bot Fast-Entry Parser & Safeguards', () => {
       expect(parsed.success).toBe(true);
     });
 
+    it('extractReplyToMsgId correctly resolves IDs across all Zalo and bot payload variants', () => {
+      // 1. Zalo Bot reply_to object
+      expect(
+        extractReplyToMsgId({}, { reply_to: { message_id: '1e2040390f6976302f7f' } }),
+      ).toBe('1e2040390f6976302f7f');
+
+      // 2. Zalo Bot reply_to direct string
+      expect(
+        extractReplyToMsgId({}, { reply_to: '1e2040390f6976302f7f' }),
+      ).toBe('1e2040390f6976302f7f');
+
+      // 3. Zalo OA quote_msg_id
+      expect(
+        extractReplyToMsgId({}, { quote_msg_id: '1e2040390f6976302f7f' }),
+      ).toBe('1e2040390f6976302f7f');
+
+      // 4. CamelCase replyTo with messageId
+      expect(
+        extractReplyToMsgId({}, { replyTo: { messageId: '1e2040390f6976302f7f' } }),
+      ).toBe('1e2040390f6976302f7f');
+
+      // 5. CamelCase quoteMessageId
+      expect(
+        extractReplyToMsgId({}, { quoteMessageId: '1e2040390f6976302f7f' }),
+      ).toBe('1e2040390f6976302f7f');
+
+      // 6. Nested quote.message.message_id
+      expect(
+        extractReplyToMsgId({}, { quote: { message: { message_id: '1e2040390f6976302f7f' } } }),
+      ).toBe('1e2040390f6976302f7f');
+
+      // 7. Root-level quote_message_id in payload
+      expect(
+        extractReplyToMsgId({ quote_message_id: '1e2040390f6976302f7f' }, {}),
+      ).toBe('1e2040390f6976302f7f');
+
+      // 8. Result-level quote_msg_id
+      expect(
+        extractReplyToMsgId({ result: { quote_msg_id: '1e2040390f6976302f7f' } }, {}),
+      ).toBe('1e2040390f6976302f7f');
+
+      // 9. Parent message id
+      expect(
+        extractReplyToMsgId({}, { parent_msg_id: '1e2040390f6976302f7f' }),
+      ).toBe('1e2040390f6976302f7f');
+
+      // 10. Non-quote message returns undefined
+      expect(
+        extractReplyToMsgId({}, { text: 'Ăn trưa 50k' }),
+      ).toBeUndefined();
+    });
+
     it('zaloBotWebhookService extracts replyToMsgId from reply_to_message correctly and passes to dispatcher', async () => {
       const dispatchSpy = jest.spyOn(zaloBotCommandDispatcher, 'dispatch').mockResolvedValue(undefined);
 
@@ -466,6 +521,67 @@ describe('Zalo Bot Fast-Entry Parser & Safeguards', () => {
           text: 'hoàn tác',
           replyToMsgId: 'original-tx-msg-001',
           userMessageId: 'msg-unique-test-1',
+        }),
+      );
+
+      dispatchSpy.mockRestore();
+    });
+
+    it('zaloBotWebhookService extracts replyToMsgId from Zalo reply_to object correctly', async () => {
+      const dispatchSpy = jest.spyOn(zaloBotCommandDispatcher, 'dispatch').mockResolvedValue(undefined);
+
+      const payload = {
+        ok: true,
+        result: {
+          event_name: 'message.text.received',
+          message: {
+            message_id: 'msg-reply-to-test-2',
+            text: 'sửa thành 60k',
+            chat: { id: 'chat-webhook-test-2' },
+            from: { id: 'user-webhook-test-2', display_name: 'Nguyen Test 2' },
+            reply_to: {
+              message_id: '1e2040390f6976302f7f',
+            },
+          },
+        },
+      };
+
+      await zaloBotWebhookService.processWebhook(payload);
+
+      expect(dispatchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          chatId: 'chat-webhook-test-2',
+          text: 'sửa thành 60k',
+          replyToMsgId: '1e2040390f6976302f7f',
+          userMessageId: 'msg-reply-to-test-2',
+        }),
+      );
+
+      dispatchSpy.mockRestore();
+    });
+
+    it('zaloBotWebhookService extracts replyToMsgId from Zalo OA quote_msg_id correctly', async () => {
+      const dispatchSpy = jest.spyOn(zaloBotCommandDispatcher, 'dispatch').mockResolvedValue(undefined);
+
+      const payload = {
+        event_name: 'user_send_text',
+        message: {
+          msg_id: '2e1820f179a100f859b7',
+          text: 'hoàn tác',
+          chat_id: 'chat-oa-test-3',
+          from_id: 'user-oa-test-3',
+          quote_msg_id: '1e2040390f6976302f7f',
+        },
+      };
+
+      await zaloBotWebhookService.processWebhook(payload);
+
+      expect(dispatchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          chatId: 'chat-oa-test-3',
+          text: 'hoàn tác',
+          replyToMsgId: '1e2040390f6976302f7f',
+          userMessageId: '2e1820f179a100f859b7',
         }),
       );
 

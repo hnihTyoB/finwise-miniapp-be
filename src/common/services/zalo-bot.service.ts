@@ -98,13 +98,19 @@ export class ZaloBotService {
     const rawId =
       data.result?.message_id ??
       data.result?.id ??
+      (data.result as any)?.messageId ??
       (data.result as any)?.msg_id ??
+      (data.result as any)?.msgId ??
       (data.result as any)?.message?.message_id ??
       (data.result as any)?.message?.id ??
+      (data.result as any)?.message?.messageId ??
       (data.result as any)?.message?.msg_id ??
+      (data.result as any)?.message?.msgId ??
       data.message_id ??
       (data as any).id ??
-      (data as any).msg_id;
+      (data as any).messageId ??
+      (data as any).msg_id ??
+      (data as any).msgId;
     return { messageId: rawId ? String(rawId) : undefined };
   }
 
