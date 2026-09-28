@@ -178,6 +178,49 @@ export class CacheService {
     this.memoryCache.set(key, { value, expiresAt });
   }
 
+  /**
+   * Set key with TTL only if key does not already exist (Atomic SETNX).
+   * Returns true if key was set, false if key already exists.
+   */
+  async setIfNotExists(key: string, value: any, ttlSeconds?: number): Promise<boolean> {
+    if (this.isRedisConnected && this.redis) {
+      try {
+        const serialized = JSON.stringify(value);
+        let result: string | null = null;
+        if (ttlSeconds && ttlSeconds > 0) {
+          result = await this.redis.set(key, serialized, 'EX', ttlSeconds, 'NX');
+        } else {
+          result = await this.redis.set(key, serialized, 'NX');
+        }
+        return result === 'OK';
+      } catch (error) {
+        this.logger.error(`Error setting key "${key}" with NX in Redis:`, error);
+        // Fallback to memory set
+      }
+    }
+
+    const now = Date.now();
+    const existing = this.memoryCache.get(key);
+    if (existing && (existing.expiresAt === null || now <= existing.expiresAt)) {
+      return false;
+    }
+
+    if (this.memoryCache.size >= this.maxMemoryKeys) {
+      const firstKey = this.memoryCache.keys().next().value;
+      if (firstKey !== undefined) {
+        this.memoryCache.delete(firstKey);
+      }
+    }
+
+    const expiresAt = ttlSeconds && ttlSeconds > 0
+      ? now + ttlSeconds * 1000
+      : null;
+
+    this.memoryCache.set(key, { value, expiresAt });
+    return true;
+  }
+
+
   async del(key: string): Promise<void> {
     if (this.isRedisConnected && this.redis) {
       try {

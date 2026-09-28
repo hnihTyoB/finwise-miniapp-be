@@ -2,6 +2,17 @@ import { z } from 'zod';
 
 const idCoerce = z.union([z.string(), z.number()]).transform((v) => String(v));
 
+export const zaloQuoteReplySchema = z.union([
+  z
+    .object({
+      id: idCoerce.optional(),
+      message_id: idCoerce.optional(),
+      msg_id: idCoerce.optional(),
+    })
+    .passthrough(),
+  idCoerce,
+]);
+
 export const zaloWebhookMessageSchema = z
   .object({
     id: idCoerce.optional(),
@@ -32,10 +43,10 @@ export const zaloWebhookMessageSchema = z
     reply_to_msg_id: idCoerce.optional(),
     quote_message_id: idCoerce.optional(),
     quote_msg_id: idCoerce.optional(),
-    reply_to_message: z.any().optional(),
-    replied_to_message: z.any().optional(),
-    quote: z.any().optional(),
-    quoted_message: z.any().optional(),
+    reply_to_message: zaloQuoteReplySchema.optional(),
+    replied_to_message: zaloQuoteReplySchema.optional(),
+    quote: zaloQuoteReplySchema.optional(),
+    quoted_message: zaloQuoteReplySchema.optional(),
   })
   .passthrough();
 
@@ -48,11 +59,18 @@ export const zaloWebhookPayloadSchema = z
       .object({
         event_name: z.string().optional(),
         message: z.union([zaloWebhookMessageSchema, z.string()]).optional(),
+        message_id: idCoerce.optional(),
+        msg_id: idCoerce.optional(),
+        reply_to_message: zaloQuoteReplySchema.optional(),
+        replied_to_message: zaloQuoteReplySchema.optional(),
+        reply_to_message_id: idCoerce.optional(),
+        quote_message_id: idCoerce.optional(),
       })
       .passthrough()
       .optional(),
   })
   .passthrough();
+
 
 export type ZaloWebhookPayload = z.infer<typeof zaloWebhookPayloadSchema>;
 export type ZaloWebhookMessage = z.infer<typeof zaloWebhookMessageSchema>;

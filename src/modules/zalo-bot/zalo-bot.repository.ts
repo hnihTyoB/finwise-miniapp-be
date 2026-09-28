@@ -14,11 +14,13 @@ export class ZaloBotRepository {
   }
 
   /**
-   * Lấy danh sách user và ví còn hoạt động theo chatId Zalo.
+   * Lấy user và ví còn hoạt động theo chatId Zalo (ưu tiên bản ghi mới nhất, giới hạn 1 tài khoản).
    */
   async findUsersWithWalletsByChatId(chatId: string) {
     return prisma.notificationSetting.findMany({
       where: { zaloBotChatId: chatId },
+      orderBy: { updatedAt: 'desc' },
+      take: 1,
       include: {
         user: {
           select: {
@@ -161,24 +163,48 @@ export class ZaloBotRepository {
   }
 
   /**
-   * Lưu liên kết chatId Zalo vào NotificationSetting.
+   * Lưu liên kết chatId Zalo vào NotificationSetting nguyên tử.
+   * Đồng thời gỡ chatId khỏi bất kỳ tài khoản cũ nào khác để bảo đảm tính duy nhất 1-to-1 và tránh rò rỉ dữ liệu chéo tài khoản.
    */
   async upsertNotificationSettingLink(
     userId: string,
     chatId: string,
     channels: NotificationChannel[],
   ) {
-    return prisma.notificationSetting.upsert({
-      where: { userId },
-      create: {
-        userId,
-        zaloBotChatId: chatId,
-        channels,
-      },
-      update: {
-        zaloBotChatId: chatId,
-        channels,
-      },
+    return prisma.$transaction(async (tx) => {
+      // 1. Thu hồi chatId này nếu đang thuộc về user khác
+      const existingHolders = await tx.notificationSetting.findMany({
+        where: {
+          zaloBotChatId: chatId,
+          userId: { not: userId },
+        },
+        select: { id: true, channels: true },
+      });
+
+      for (const holder of existingHolders) {
+        const updatedChannels = holder.channels.filter((c) => c !== NotificationChannel.ZALO);
+        await tx.notificationSetting.update({
+          where: { id: holder.id },
+          data: {
+            zaloBotChatId: null,
+            channels: updatedChannels.length > 0 ? updatedChannels : [NotificationChannel.IN_APP],
+          },
+        });
+      }
+
+      // 2. Gán chatId cho user hiện tại
+      return tx.notificationSetting.upsert({
+        where: { userId },
+        create: {
+          userId,
+          zaloBotChatId: chatId,
+          channels,
+        },
+        update: {
+          zaloBotChatId: chatId,
+          channels,
+        },
+      });
     });
   }
 

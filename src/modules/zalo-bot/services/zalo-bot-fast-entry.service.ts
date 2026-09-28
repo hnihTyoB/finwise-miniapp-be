@@ -343,7 +343,7 @@ export class ZaloBotFastEntryService {
 
   // ─── Reply Card Builder ───────────────────────────────────────────────────────
 
-  private buildSuccessCard(result: FastEntryResult, txId: string): string {
+  private buildSuccessCard(result: FastEntryResult, _txId: string): string {
     const isIncome = result.type === TransactionType.INCOME;
     const icon = isIncome ? '💰' : '💸';
     const sign = isIncome ? '+' : '-';

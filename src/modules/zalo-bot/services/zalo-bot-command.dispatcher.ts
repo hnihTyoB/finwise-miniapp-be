@@ -23,9 +23,11 @@ export class ZaloBotCommandDispatcher {
     const { chatId, senderName, text, replyToMsgId, userMessageId } = payload;
     const trimmed = text.trim();
     const lower = trimmed.toLowerCase();
+    const maskedChatId = chatId.length > 4 ? `${chatId.slice(0, 4)}***` : chatId;
 
-    this.logger.info(`Dispatching message from chat ${chatId}`, {
+    this.logger.info(`Dispatching message from chat ${maskedChatId}`, {
       hasReplyTo: Boolean(replyToMsgId),
+      replyToMsgId,
       textLength: trimmed.length,
     });
 
@@ -76,11 +78,19 @@ export class ZaloBotCommandDispatcher {
       replyToMsgId,
       userMessageId,
     );
-    const sent = await zaloBotService.sendMessage(chatId, replyText);
 
-    // Lưu ánh xạ message_id Bot vừa gửi → transactionId (24h) để người dùng có thể Quote-Reply chính xác
-    if (sent?.messageId && transactionId) {
-      await zaloBotContextService.saveMsgToTx(sent.messageId, transactionId, linkedUser.userId);
+    try {
+      const sent = await zaloBotService.sendMessage(chatId, replyText);
+
+      // Lưu ánh xạ message_id Bot vừa gửi → transactionId (24h) để người dùng có thể Quote-Reply chính xác
+      if (sent?.messageId && transactionId) {
+        await zaloBotContextService.saveMsgToTx(sent.messageId, transactionId, linkedUser.userId);
+      }
+    } catch (sendErr) {
+      this.logger.error(
+        `Failed to send bot reply to chat ${maskedChatId} for transaction ${transactionId ?? 'unknown'}:`,
+        sendErr,
+      );
     }
   }
 

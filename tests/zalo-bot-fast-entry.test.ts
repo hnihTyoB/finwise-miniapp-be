@@ -1,4 +1,4 @@
-import { TransactionType } from '@prisma/client';
+import { NotificationChannel, TransactionType } from '@prisma/client';
 import {
   EntityContext,
   parseAmount,
@@ -12,6 +12,7 @@ import { zaloBotFastEntryService } from '../src/modules/zalo-bot/services/zalo-b
 import { zaloBotRepository } from '../src/modules/zalo-bot/zalo-bot.repository';
 import { zaloBotWebhookService } from '../src/modules/zalo-bot/services/zalo-bot-webhook.service';
 import { zaloBotCommandDispatcher } from '../src/modules/zalo-bot/services/zalo-bot-command.dispatcher';
+import { cacheService } from '../src/common/services/cache.service';
 
 describe('Zalo Bot Fast-Entry Parser & Safeguards', () => {
   const mockEntityContext: EntityContext = {
@@ -653,4 +654,46 @@ describe('Zalo Bot Fast-Entry Parser & Safeguards', () => {
       expect(userMsgMapping?.transactionId).toBe('new-tx-created');
     });
   });
+
+  describe('Atomic Deduplication & Isolation Safeguards', () => {
+    it('cacheService.setIfNotExists returns true for new key and false for duplicate key', async () => {
+      const testKey = 'test:dedup:unique-123';
+      await cacheService.del(testKey);
+
+      const firstCall = await cacheService.setIfNotExists(testKey, true, 60);
+      expect(firstCall).toBe(true);
+
+      const secondCall = await cacheService.setIfNotExists(testKey, true, 60);
+      expect(secondCall).toBe(false);
+
+      await cacheService.del(testKey);
+    });
+
+    it('zaloBotWebhookService skips duplicate messages atomically without calling dispatcher', async () => {
+      const dispatchSpy = jest.spyOn(zaloBotCommandDispatcher, 'dispatch').mockResolvedValue(undefined);
+      const uniqueMsgId = `dedup-msg-${Date.now()}`;
+      const payload = {
+        result: {
+          event_name: 'message.text.received',
+          message: {
+            message_id: uniqueMsgId,
+            text: 'Ăn trưa 50k',
+            chat: { id: 'chat-dedup-test' },
+            from: { id: 'user-dedup-test' },
+          },
+        },
+      };
+
+      // Lần 1: Xử lý bình thường
+      await zaloBotWebhookService.processWebhook(payload);
+      expect(dispatchSpy).toHaveBeenCalledTimes(1);
+
+      // Lần 2 (Duplicate): Bị chặn bởi deduplication, không gọi dispatch
+      await zaloBotWebhookService.processWebhook(payload);
+      expect(dispatchSpy).toHaveBeenCalledTimes(1);
+
+      dispatchSpy.mockRestore();
+    });
+  });
 });
+
