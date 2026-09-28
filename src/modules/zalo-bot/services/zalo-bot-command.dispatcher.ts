@@ -125,13 +125,16 @@ export class ZaloBotCommandDispatcher {
       if (!user.wallets || user.wallets.length === 0) {
         lines.push('  *(Chưa có ví tài chính)*');
       } else {
-        let totalBalance = 0;
+        const balancesByCurrency: Record<string, number> = {};
         for (const w of user.wallets) {
           const bal = Number(w.balance);
-          totalBalance += bal;
+          balancesByCurrency[w.currency] = (balancesByCurrency[w.currency] ?? 0) + bal;
           lines.push(`  • ${w.name}: **${new Intl.NumberFormat('vi-VN').format(bal)} ${w.currency}**`);
         }
-        lines.push(`  👉 **Tổng cộng: ${new Intl.NumberFormat('vi-VN').format(totalBalance)} VND**`);
+        const summaryParts = Object.entries(balancesByCurrency)
+          .map(([curr, total]) => `${new Intl.NumberFormat('vi-VN').format(total)} ${curr}`)
+          .join(', ');
+        lines.push(`  👉 **Tổng cộng: ${summaryParts}**`);
       }
       lines.push('');
     }

@@ -14,6 +14,104 @@ export interface EntityContext {
   defaultWalletId: string | null;
 }
 
+// ─── Tên tiếng Việt và Từ đồng nghĩa cho Danh mục Hệ thống ───────────────────
+
+export const CATEGORY_VIETNAMESE_NAMES: Record<string, string> = {
+  Salary: 'Lương',
+  Investment: 'Đầu tư',
+  'Other Income': 'Thu nhập khác',
+  'Food & Dining': 'Ăn uống',
+  Groceries: 'Đi chợ',
+  Restaurants: 'Nhà hàng',
+  Transport: 'Di chuyển',
+  Shopping: 'Mua sắm',
+  'Bills & Utilities': 'Hóa đơn & tiện ích',
+  Health: 'Sức khỏe',
+  Entertainment: 'Giải trí',
+  Education: 'Giáo dục',
+  Housing: 'Nhà ở',
+  Travel: 'Du lịch',
+  'Personal Care': 'Chăm sóc cá nhân',
+  'Gifts & Donations': 'Quà tặng & từ thiện',
+  'Other Expense': 'Chi tiêu khác',
+};
+
+export function formatCategoryDisplayName(categoryName: string): string {
+  const vi = CATEGORY_VIETNAMESE_NAMES[categoryName];
+  return vi ? `${vi} (${categoryName})` : categoryName;
+}
+
+export const SYSTEM_CATEGORY_SYNONYMS: Record<string, string[]> = {
+  'Food & Dining': [
+    'ăn uống', 'an uong', 'ăn trưa', 'an trua', 'ăn sáng', 'an sang', 'ăn tối', 'an toi',
+    'ăn đêm', 'an dem', 'cơm trưa', 'com trua', 'cơm', 'com', 'phở', 'pho', 'bún', 'bun',
+    'bánh mì', 'banh mi', 'cà phê', 'ca phe', 'cafe', 'coffee', 'cf', 'trà sữa', 'tra sua',
+    'trà', 'tra', 'nước', 'nuoc', 'ăn vặt', 'an vat', 'đồ ăn', 'do an', 'thức ăn', 'thuc an',
+    'đi ăn', 'di an', 'quán ăn', 'quan an', 'tiệc', 'tiec', 'nhậu', 'nhau', 'bia', 'food',
+    'dining', 'drink', 'drinks', 'ăn tiệm', 'an tiem', 'trà chanh', 'tra chanh',
+  ],
+  Restaurants: [
+    'nhà hàng', 'nha hang', 'quán', 'quan', 'buffet', 'lẩu', 'lau', 'nướng', 'nuong', 'bbq',
+    'restaurant', 'restaurants', 'quán nhậu', 'quan nhau',
+  ],
+  Groceries: [
+    'đi chợ', 'di cho', 'chợ', 'siêu thị', 'sieu thi', 'bách hóa', 'bach hoa',
+    'thực phẩm', 'thuc pham', 'mua đồ ăn', 'mua do an', 'rau', 'thịt', 'thit', 'cá',
+    'trứng', 'trung', 'groceries', 'grocery', 'supermarket', 'mua rau', 'mua thịt',
+  ],
+  Transport: [
+    'di chuyển', 'di chuyen', 'đi lại', 'di lai', 'đổ xăng', 'do xang', 'tiền xăng', 'tien xang',
+    'xăng', 'xang', 'gửi xe', 'gui xe', 'vé xe', 've xe', 'xe bus', 'bus', 'xe buýt', 'xe buyt',
+    'grab', 'be', 'gojek', 'xanh sm', 'taxi', 'rửa xe', 'rua xe', 'sửa xe', 'sua xe',
+    'bảo dưỡng xe', 'bao duong xe', 'thay nhớt', 'thay nhot', 'cầu đường', 'cau duong',
+    'vé máy bay', 've may bay', 'tàu hỏa', 'tau hoa', 'transport', 'transportation',
+  ],
+  Shopping: [
+    'mua sắm', 'mua sam', 'mua đồ', 'mua do', 'quần áo', 'quan ao', 'giày dép', 'giay dep',
+    'mỹ phẩm', 'my pham', 'son', 'shopee', 'lazada', 'tiki', 'tiktok shop', 'mua sắm online',
+    'đồ dùng', 'do dung', 'gia dụng', 'gia dung', 'shopping', 'mua áo', 'mua quần',
+  ],
+  'Bills & Utilities': [
+    'hóa đơn', 'hoa don', 'tiện ích', 'tien ich', 'tiền điện', 'tien dien', 'tiền nước', 'tien nuoc',
+    'tiền mạng', 'tien mang', 'wifi', 'internet', 'điện thoại', 'dien thoai', 'nạp thẻ', 'nap the',
+    'tiền rác', 'tien rac', 'phí quản lý', 'phi quan ly', 'bills', 'utilities',
+  ],
+  Health: [
+    'sức khỏe', 'suc khoe', 'y tế', 'y te', 'thuốc', 'thuoc', 'mua thuốc', 'mua thuoc',
+    'tiệm thuốc', 'tiem thuoc', 'nhà thuốc', 'nha thuoc', 'bác sĩ', 'bac si', 'khám bệnh', 'kham benh',
+    'bệnh viện', 'benh vien', 'nha khoa', 'nha khoa', 'răng', 'rang', 'vitamin', 'khẩu trang',
+    'health', 'medical', 'medicine',
+  ],
+  Entertainment: [
+    'giải trí', 'giai tri', 'xem phim', 'xem phim', 'cinema', 'rạp phim', 'rap phim', 'vé phim',
+    'game', 'nạp game', 'nap game', 'netflix', 'spotify', 'youtube', 'karaoke', 'hát',
+    'bida', 'bowling', 'du lịch', 'du lich', 'vui chơi', 'vui choi', 'entertainment',
+  ],
+  Education: [
+    'giáo dục', 'giao duc', 'học phí', 'hoc phi', 'tiền học', 'tien hoc', 'khóa học', 'khoa hoc',
+    'sách', 'sach', 'mua sách', 'mua sach', 'vở', 'vo', 'bút', 'but', 'education',
+  ],
+  Housing: [
+    'nhà ở', 'nha o', 'tiền nhà', 'tien nha', 'tiền trọ', 'tien tro', 'thuê nhà', 'thue nha',
+    'chung cư', 'chung cu', 'sửa nhà', 'sua nha',
+  ],
+  Salary: [
+    'lương', 'luong', 'tiền lương', 'tien luong', 'bảng lương', 'bang luong', 'salary', 'income',
+  ],
+  Investment: [
+    'đầu tư', 'dau tu', 'chứng khoán', 'chung khoan', 'cổ phiếu', 'co phieu', 'tiết kiệm', 'tiet kiem',
+    'tiền lãi', 'tien lai', 'lãi', 'lai', 'crypto', 'coin', 'vàng', 'vang', 'investment',
+  ],
+  'Other Income': [
+    'thu nhập khác', 'thu nhap khac', 'thưởng', 'thuong', 'tiền thưởng', 'tien thuong',
+    'bonus', 'hoàn tiền', 'hoan tien', 'bán đồ', 'ban do', 'quà tặng', 'qua tang', 'lì xì', 'li xi',
+    'khách trả', 'khach tra', 'other income',
+  ],
+  'Other Expense': [
+    'chi tiêu khác', 'chi tieu khac', 'chi khác', 'chi khac', 'other expense',
+  ],
+};
+
 // ─── Từ khóa phân loại ý định ────────────────────────────────────────────────
 
 const INCOME_KEYWORDS = [
@@ -45,6 +143,7 @@ const EDIT_CATEGORY_PATTERNS = [
   /(?:không phải|khong phai)\s+(.+?)(?:\s+mà là|\s+nhé|$)/i,
   /(?:đổi\s+danh mục\s+(?:sang|thành)\s+)(.+)/i,
   /(?:chuyển\s+sang\s+mục\s+)(.+)/i,
+  /(?:đổi\s+sang\s+)(.+)/i,
 ];
 
 const EDIT_DESCRIPTION_PATTERNS = [
@@ -76,6 +175,53 @@ const UNIT_MULTIPLIERS: Record<string, number> = {
 function normalizeText(text: string): string {
   return text.toLowerCase().trim();
 }
+
+/**
+ * Loại bỏ dấu tiếng Việt để so khớp không dấu (vd: "Quỹ đen" -> "quy den", "Tiền mặt" -> "tien mat").
+ * Giữ nguyên độ dài chuỗi 1-1 với chuỗi gốc để việc cắt chuỗi (substring) chính xác.
+ */
+export function stripDiacritics(str: string): string {
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, (m) => (m === 'đ' ? 'd' : 'D'))
+    .toLowerCase()
+    .trim();
+}
+
+/**
+ * Từ điển biệt danh phổ biến của ngân hàng & ví điện tử Việt Nam.
+ * Giúp nhận diện khi người dùng đặt tên ví là "Vietcombank" nhưng chat "vcb",
+ * hoặc đặt là "VCB" nhưng chat "vietcombank", "Tiền mặt" nhưng chat "cash".
+ */
+export const BANK_WALLET_ALIASES: Record<string, string[]> = {
+  vcb: ['vietcombank', 'ngan hang ngoai thuong'],
+  vietcombank: ['vcb', 'vietcom'],
+  tcb: ['techcombank', 'techcom'],
+  techcombank: ['tcb', 'techcom'],
+  bidv: ['dau tu va phat trien'],
+  ctg: ['vietinbank', 'viettinbank', 'vietin'],
+  vietinbank: ['ctg', 'vietin', 'viettinbank'],
+  mbbank: ['mb', 'quan doi', 'mb bank'],
+  mb: ['mbbank', 'quan doi', 'mb bank'],
+  acb: ['a chau'],
+  tpbank: ['tpb', 'tien phong'],
+  tpb: ['tpbank', 'tien phong'],
+  vpbank: ['vpb', 'thinh vuong'],
+  vpb: ['vpbank', 'thinh vuong'],
+  sacombank: ['stb', 'sai gon thuong tin'],
+  stb: ['sacombank'],
+  hdbank: ['hdb'],
+  vib: ['quoc te'],
+  shb: ['sai gon ha noi'],
+  msb: ['hang hai'],
+  ocb: ['phuong dong'],
+  momo: ['vi momo'],
+  zalopay: ['zalo pay', 'vi zalo', 'vi zalopay'],
+  shopeepay: ['shopee pay', 'airpay'],
+  cash: ['tien mat', 'tien tui'],
+  'tien mat': ['cash', 'tien tui'],
+};
 
 /**
  * Phân tích số tiền từ chuỗi số và đơn vị.
@@ -162,36 +308,127 @@ function extractWallet(
   wallets: EntityContext['wallets'],
   defaultWalletId: string | null,
 ): { walletId: string; walletName: string; remaining: string } | null {
-  const lower = normalizeText(text);
+  const cleanText = text.trim();
+  const lower = normalizeText(cleanText);
+  const stripped = stripDiacritics(cleanText);
 
-  // Sắp xếp theo độ dài tên giảm dần để khớp tên dài trước
+  // Sắp xếp ví theo độ dài tên giảm dần để ưu tiên tên dài hơn
   const sorted = [...wallets].sort((a, b) => b.name.length - a.name.length);
 
+  // ── Bước 1: Khớp có tiền tố rõ ràng ("ví", "vi", "tk", "tài khoản", "tai khoan") ──
+  // Áp dụng cho MỌI tên ví (kể cả tên tự đặt, lạ, xàm như "quỹ đen", "ví giấu vợ", "heo đất", "ví 1", "tiền lẻ")
   for (const w of sorted) {
     const wLower = normalizeText(w.name);
-    const patterns = [
-      `ví ${wLower}`,
-      `vi ${wLower}`,
-      `tài khoản ${wLower}`,
-      `tai khoan ${wLower}`,
-      wLower,
-    ];
-    for (const p of patterns) {
-      const idx = lower.indexOf(p);
-      if (idx !== -1) {
-        const remaining = (text.slice(0, idx) + text.slice(idx + p.length))
-          .replace(/\s+/g, ' ')
-          .trim();
-        return { walletId: w.id, walletName: w.name, remaining };
+    const wStripped = stripDiacritics(w.name);
+    const aliases = [wLower, wStripped];
+    const bankAl = BANK_WALLET_ALIASES[wStripped] || [];
+    for (const a of bankAl) {
+      aliases.push(a);
+    }
+
+    const uniqueAliases = Array.from(new Set(aliases)).sort((a, b) => b.length - a.length);
+
+    for (const alias of uniqueAliases) {
+      const prefixedPatterns = [
+        `ví ${alias}`,
+        `vi ${alias}`,
+        `tài khoản ${alias}`,
+        `tai khoan ${alias}`,
+        `tk ${alias}`,
+      ];
+
+      for (const p of prefixedPatterns) {
+        let searchStart = 0;
+        while (searchStart < lower.length) {
+          let idx = lower.indexOf(p, searchStart);
+          let matchLen = p.length;
+
+          if (idx === -1) {
+            const pStripped = stripDiacritics(p);
+            idx = stripped.indexOf(pStripped, searchStart);
+            matchLen = pStripped.length;
+          }
+
+          if (idx === -1) break;
+
+          // Kiểm tra word boundary trước và sau (tránh ví dụ: "tk 1" khớp vào "tk 100k", "ví vcb" khớp "ví vcba")
+          const prevChar = idx > 0 ? lower[idx - 1] : ' ';
+          const nextChar = idx + matchLen < lower.length ? lower[idx + matchLen] : ' ';
+          const isWordBoundary = /[\s,.\-!?:;/()]/.test(prevChar) && /[\s,.\-!?:;/()]/.test(nextChar);
+
+          if (isWordBoundary) {
+            const remaining = (cleanText.slice(0, idx) + cleanText.slice(idx + matchLen))
+              .replace(/\s+/g, ' ')
+              .trim();
+            return { walletId: w.id, walletName: w.name, remaining };
+          }
+
+          searchStart = idx + 1;
+        }
       }
     }
   }
 
-  // Fallback về ví mặc định
+  // ── Bước 2: Khớp tên ví đứng độc lập (không có tiền tố "ví") ──
+  // Áp dụng cho tên ví có độ dài >= 2 ký tự và không nằm trong các từ loại trừ thông thường
+  const genericExcluded = new Set(['tiền', 'tien', 'chi', 'thu', 'ăn', 'an', 'xe', 'ví', 'vi', 'đổi', 'doi']);
+
+  for (const w of sorted) {
+    const wLower = normalizeText(w.name);
+    const wStripped = stripDiacritics(w.name);
+    const aliases = [wLower, wStripped];
+    const bankAl = BANK_WALLET_ALIASES[wStripped] || [];
+    for (const a of bankAl) {
+      aliases.push(a);
+    }
+
+    const uniqueAliases = Array.from(new Set(aliases))
+      .filter((a) => a.length >= 2 && !genericExcluded.has(a))
+      .sort((a, b) => b.length - a.length);
+
+    for (const alias of uniqueAliases) {
+      let searchStart = 0;
+      while (searchStart < lower.length) {
+        let idx = lower.indexOf(alias, searchStart);
+        let matchLen = alias.length;
+
+        if (idx === -1) {
+          idx = stripped.indexOf(alias, searchStart);
+          matchLen = alias.length;
+        }
+
+        if (idx === -1) break;
+
+        // Kiểm tra word boundary trước và sau
+        const prevChar = idx > 0 ? lower[idx - 1] : ' ';
+        const nextChar = idx + matchLen < lower.length ? lower[idx + matchLen] : ' ';
+        const isWordBoundary = /[\s,.\-!?:;/()]/.test(prevChar) && /[\s,.\-!?:;/()]/.test(nextChar);
+
+        if (isWordBoundary) {
+          const remaining = (cleanText.slice(0, idx) + cleanText.slice(idx + matchLen))
+            .replace(/\s+/g, ' ')
+            .trim();
+          return { walletId: w.id, walletName: w.name, remaining };
+        }
+
+        searchStart = idx + 1;
+      }
+    }
+  }
+
+  // ── Bước 3: Kiểm tra người dùng có gõ rõ ràng tiền tố ví nhưng tên ví không khớp ──
+  // Ví dụ người dùng gõ "ví momo" nhưng không có ví momo trong tài khoản
+  // Không nên âm thầm trừ tiền vào ví mặc định!
+  const hasExplicitWalletPrefix = /(?:^|\s)(?:ví|vi|tài khoản|tai khoan|tk)\s+(\S+)/i.test(lower);
+  if (hasExplicitWalletPrefix) {
+    return null;
+  }
+
+  // ── Bước 4: Fallback về ví mặc định nếu không nhắc đến ví nào ──
   if (defaultWalletId) {
     const defaultWallet = wallets.find((w) => w.id === defaultWalletId);
     if (defaultWallet) {
-      return { walletId: defaultWallet.id, walletName: defaultWallet.name, remaining: text };
+      return { walletId: defaultWallet.id, walletName: defaultWallet.name, remaining: cleanText };
     }
   }
 
@@ -203,22 +440,73 @@ function extractCategory(
   type: TransactionType,
   categories: EntityContext['categories'],
 ): { categoryId: string; categoryName: string; remaining: string } | null {
-  const lower = normalizeText(text);
+  const cleanText = text.trim();
+  const lower = normalizeText(cleanText);
 
-  const compatible = categories.filter(
-    (c) => c.type === type || c.type === TransactionType.EXPENSE,
-  );
+  // Lọc đúng theo loại giao dịch (INCOME vs EXPENSE)
+  const strictlyCompatible = categories.filter((c) => c.type === type);
+  const compatible = strictlyCompatible.length > 0 ? strictlyCompatible : categories;
 
-  const sorted = [...compatible].sort((a, b) => b.name.length - a.name.length);
+  // 1. Khớp theo tên danh mục trực tiếp (tên tự tạo hoặc tên hệ thống tiếng Anh/Việt)
+  const sortedByName = [...compatible].sort((a, b) => b.name.length - a.name.length);
 
-  for (const cat of sorted) {
+  for (const cat of sortedByName) {
     const catLower = normalizeText(cat.name);
-    const idx = lower.indexOf(catLower);
-    if (idx !== -1) {
-      const remaining = (text.slice(0, idx) + text.slice(idx + catLower.length))
-        .replace(/\s+/g, ' ')
-        .trim();
-      return { categoryId: cat.id, categoryName: cat.name, remaining };
+    let searchStart = 0;
+    while (searchStart < lower.length) {
+      const idx = lower.indexOf(catLower, searchStart);
+      if (idx === -1) break;
+
+      const prevChar = idx > 0 ? lower[idx - 1] : ' ';
+      const nextChar = idx + catLower.length < lower.length ? lower[idx + catLower.length] : ' ';
+      const isWordBoundary = /[\s,.\-!?:;/()]/.test(prevChar) && /[\s,.\-!?:;/()]/.test(nextChar);
+
+      if (isWordBoundary) {
+        const remaining = (cleanText.slice(0, idx) + cleanText.slice(idx + catLower.length))
+          .replace(/\s+/g, ' ')
+          .trim();
+        return { categoryId: cat.id, categoryName: cat.name, remaining };
+      }
+
+      searchStart = idx + 1;
+    }
+  }
+
+  // 2. Khớp theo từ đồng nghĩa tiếng Việt của danh mục hệ thống
+  const synonymCandidates: Array<{
+    cat: EntityContext['categories'][number];
+    syn: string;
+    len: number;
+  }> = [];
+
+  for (const cat of compatible) {
+    const synonyms = SYSTEM_CATEGORY_SYNONYMS[cat.name] || [];
+    for (const syn of synonyms) {
+      synonymCandidates.push({ cat, syn, len: syn.length });
+    }
+  }
+
+  // Ưu tiên khớp các cụm từ dài trước (ví dụ "cà phê sáng" hoặc "ăn trưa" trước "ăn")
+  synonymCandidates.sort((a, b) => b.len - a.len);
+
+  for (const item of synonymCandidates) {
+    let searchStart = 0;
+    while (searchStart < lower.length) {
+      const idx = lower.indexOf(item.syn, searchStart);
+      if (idx === -1) break;
+
+      const prevChar = idx > 0 ? lower[idx - 1] : ' ';
+      const nextChar = idx + item.syn.length < lower.length ? lower[idx + item.syn.length] : ' ';
+      const isWordBoundary = /[\s,.\-!?:;/()]/.test(prevChar) && /[\s,.\-!?:;/()]/.test(nextChar);
+
+      if (isWordBoundary) {
+        const remaining = (cleanText.slice(0, idx) + cleanText.slice(idx + item.syn.length))
+          .replace(/\s+/g, ' ')
+          .trim();
+        return { categoryId: item.cat.id, categoryName: item.cat.name, remaining };
+      }
+
+      searchStart = idx + 1;
     }
   }
 

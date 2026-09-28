@@ -3,7 +3,11 @@ import { LoggerService } from '../../../common/services/logger.service';
 import { instantToBusinessDate } from '../../../common/date-time/business-time';
 import { TransactionService } from '../../transactions/transaction.service';
 import { zaloBotRepository } from '../zalo-bot.repository';
-import { EntityContext, ZaloBotMicroParser } from './zalo-bot-micro-parser';
+import {
+  EntityContext,
+  formatCategoryDisplayName,
+  ZaloBotMicroParser,
+} from './zalo-bot-micro-parser';
 import { zaloBotContextService } from './zalo-bot-context.service';
 import {
   AmbiguousIntent,
@@ -191,7 +195,7 @@ export class ZaloBotFastEntryService {
       changeLines.push(`• Ví: **${current.wallet.name}** → **${ast.walletName}**`);
     }
     if (ast.categoryId !== undefined && ast.categoryName) {
-      changeLines.push(`• Danh mục: **${current.category.name}** → **${ast.categoryName}**`);
+      changeLines.push(`• Danh mục: **${formatCategoryDisplayName(current.category.name)}** → **${formatCategoryDisplayName(ast.categoryName)}**`);
     }
     if (ast.description !== undefined) {
       changeLines.push(`• Ghi chú: **${ast.description}**`);
@@ -240,11 +244,16 @@ export class ZaloBotFastEntryService {
     // Xóa context để tránh double-undo
     await zaloBotContextService.clearContext(chatId);
 
+    const actionText =
+      tx.type === TransactionType.INCOME
+        ? 'đã được điều chỉnh giảm'
+        : 'đã được hoàn lại';
+
     return [
       `↩️ **ĐÃ HOÀN TÁC GIAO DỊCH THÀNH CÔNG!**`,
       ``,
-      `• Đã xóa: **${categoryName}** — **${this.formatMoney(amount)} ${currency}**`,
-      `• Ví **${walletName}** đã được hoàn lại **${this.formatMoney(amount)} ${currency}**`,
+      `• Đã xóa: **${formatCategoryDisplayName(categoryName)}** — **${this.formatMoney(amount)} ${currency}**`,
+      `• Ví **${walletName}** ${actionText} **${this.formatMoney(amount)} ${currency}**`,
       `• Số dư hiện tại: **${this.formatMoney(newBalance)} ${currency}**`,
     ].join('\n');
   }
@@ -253,7 +262,15 @@ export class ZaloBotFastEntryService {
 
   private buildAmbiguousCard(intent: AmbiguousIntent, entityCtx: EntityContext): string {
     const walletExamples = entityCtx.wallets.slice(0, 3).map((w) => w.name).join(', ');
-    const catExamples = entityCtx.categories.slice(0, 3).map((c) => c.name).join(', ');
+
+    // Lọc danh mục gợi ý theo đúng loại giao dịch (EXPENSE vs INCOME)
+    const targetType = intent.partial.type ?? TransactionType.EXPENSE;
+    const compatibleCats = entityCtx.categories.filter((c) => c.type === targetType);
+    const candidateCats = compatibleCats.length > 0 ? compatibleCats : entityCtx.categories;
+    const catExamples = candidateCats
+      .slice(0, 5)
+      .map((c) => formatCategoryDisplayName(c.name))
+      .join(', ');
 
     switch (intent.missingField) {
       case 'amount':
@@ -277,14 +294,18 @@ export class ZaloBotFastEntryService {
           `Gửi lại với tên ví, ví dụ: \`${intent.partial.amount ? this.formatMoney(intent.partial.amount) + 'đ ' : ''}ví ${entityCtx.wallets[0]?.name ?? 'Tiền mặt'}\``,
         ].join('\n');
 
-      case 'category':
+      case 'category': {
+        const typeLabel = targetType === TransactionType.INCOME ? 'Thu nhập' : 'Chi tiêu';
+        const sampleAmt = intent.partial.amount ? `${this.formatMoney(intent.partial.amount)}đ` : '50k';
+        const sampleWallet = intent.partial.walletName ? ` ví ${intent.partial.walletName}` : '';
         return [
           `🤔 **Giao dịch này thuộc danh mục nào?**`,
           ``,
-          `Danh mục gợi ý: **${catExamples}**`,
+          `Danh mục gợi ý (${typeLabel}): **${catExamples}**`,
           ``,
-          `Gửi lại kèm danh mục, ví dụ: \`Cà phê 35k ví tiền mặt\``,
+          `Gửi lại kèm danh mục, ví dụ: \`Ăn trưa ${sampleAmt}${sampleWallet}\``,
         ].join('\n');
+      }
 
       default:
         return `🤔 FinWise chưa hiểu tin nhắn này. Hãy thử: \`Cà phê sáng 35k ví tiền mặt\``;
@@ -303,7 +324,7 @@ export class ZaloBotFastEntryService {
       `${title}`,
       ``,
       `${icon} **Số tiền:** ${sign}${this.formatMoney(result.amount)} ${result.currency}`,
-      `📂 **Danh mục:** ${result.categoryName}`,
+      `📂 **Danh mục:** ${formatCategoryDisplayName(result.categoryName)}`,
       `💼 **Tài khoản:** Ví ${result.walletName}`,
     ];
 
