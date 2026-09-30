@@ -1,4 +1,5 @@
 import { envConfig } from '../../config/env.config';
+import { mailConfig } from '../../config/mail.config';
 
 /**
  * Định dạng text thông báo cho Zalo Bot theo Markdown của Zalo Bot Platform.
@@ -7,13 +8,22 @@ import { envConfig } from '../../config/env.config';
 export function formatZaloNotificationText(
   title: string,
   message: string,
-  _actionUrl?: string | null,
+  actionUrl?: string | null,
 ): string {
   const lines: string[] = [];
 
-  lines.push(`🔔 **${title}**`);
+  const prefix = /^[\p{Emoji}\u2000-\u32ff]/u.test(title) ? '' : '🔔 ';
+  lines.push(`${prefix}**${title}**`);
   lines.push('');
   lines.push(message);
+
+  if (actionUrl) {
+    const fullUrl = actionUrl.startsWith('http')
+      ? actionUrl
+      : `${mailConfig.appUrl}${actionUrl.startsWith('/') ? '' : '/'}${actionUrl}`;
+    lines.push('');
+    lines.push(`👉 [Mở trong FinWise](${fullUrl})`);
+  }
 
   return lines.join('\n');
 }

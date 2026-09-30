@@ -4,13 +4,14 @@ import { zaloBotLinkService } from './zalo-bot-link.service';
 import { zaloBotFastEntryService } from './zalo-bot-fast-entry.service';
 import { zaloBotContextService } from './zalo-bot-context.service';
 import { LoggerService } from '../../../common/services/logger.service';
-import { prisma } from '../../../database/prisma.client';
 import { DebtSettlementService } from '../../debts/services/debt-settlement.service';
+import { DebtRepository } from '../../debts/debt.repository';
 import { prismaDateToBusinessDate } from '../../../common/date-time/business-time';
 
 export class ZaloBotCommandDispatcher {
   private readonly logger = new LoggerService('ZaloBotCommandDispatcher');
   private readonly debtSettlementService = new DebtSettlementService();
+  private readonly debtRepository = new DebtRepository();
 
   /**
    * Xử lý tin nhắn đến từ người dùng và điều phối lệnh phù hợp.
@@ -221,22 +222,7 @@ export class ZaloBotCommandDispatcher {
    * Tra cứu danh sách hợp đồng nợ và các kỳ sắp đến hạn qua lệnh /no
    */
   private async handleDebtListCommand(chatId: string, userId: string): Promise<void> {
-    const contracts = await prisma.debtContract.findMany({
-      where: {
-        userId,
-        isArchived: false,
-        status: { in: ['ACTIVE', 'OVERDUE'] },
-      },
-      include: {
-        scheduleItems: {
-          where: {
-            status: { in: ['SCHEDULED', 'UPCOMING', 'DUE', 'OVERDUE'] },
-          },
-          orderBy: { dueDate: 'asc' },
-          take: 3,
-        },
-      },
-    });
+    const contracts = await this.debtRepository.findActiveDebtsForBot(userId);
 
     if (contracts.length === 0) {
       await zaloBotService.sendMessage(
@@ -301,10 +287,7 @@ export class ZaloBotCommandDispatcher {
     userId: string,
     scheduleItemId: string,
   ): Promise<void> {
-    const item = await prisma.debtScheduleItem.findFirst({
-      where: { id: scheduleItemId, userId },
-      include: { debtContract: true },
-    });
+    const item = await this.debtRepository.findScheduleItemForPay(scheduleItemId, userId);
 
     if (!item) {
       await zaloBotService.sendMessage(
@@ -335,18 +318,30 @@ export class ZaloBotCommandDispatcher {
       const interestStr = result.settlementDetails.interestPaid.toLocaleString('vi-VN');
       const remainingStr = Number(result.contract.remainingPrincipal).toLocaleString('vi-VN');
 
-      const receiptMsg =
-        `✅ **THANH TOÁN KỲ NỢ THÀNH CÔNG!**\n` +
-        `──────────────────────────────\n` +
-        `📌 **Khoản nợ:** ${item.debtContract.name} (${item.debtContract.counterparty})\n` +
-        `🔹 **Kỳ thanh toán:** Kỳ ${item.period}\n` +
-        `💰 **Tổng tiền:** **${totalPaidStr} đ**\n` +
-        `   • Gốc hoàn trả: ${principalStr} đ *(giảm nợ)*\n` +
-        `   • Lãi phát sinh: ${interestStr} đ *(ghi nhận Chi phí lãi)*\n` +
-        `📉 **Dư nợ gốc còn lại:** **${remainingStr} đ**\n\n` +
-        (result.settlementDetails.isFullySettled
-          ? `🎉 **CHÚC MỪNG:** BẠN ĐÃ TẤT TOÁN XONG TOÀN BỘ KHOẢN NỢ NÀY! 🏆`
-          : `💡 Bảng kế toán và Tài sản ròng (Net Worth) của bạn đã được cập nhật tự động.`);
+      const isReceivable = item.debtContract.type === 'LOAN_RECEIVABLE';
+      const receiptMsg = isReceivable
+        ? `✅ **XÁC NHẬN THU HỒI NỢ THÀNH CÔNG!**\n` +
+          `──────────────────────────────\n` +
+          `📌 **Khoản cho vay:** ${item.debtContract.name} (${item.debtContract.counterparty})\n` +
+          `🔹 **Kỳ thu hồi:** Kỳ ${item.period}\n` +
+          `💰 **Tổng tiền thu về:** **${totalPaidStr} đ**\n` +
+          `   • Gốc thu hồi: ${principalStr} đ *(giảm nợ cho vay)*\n` +
+          `   • Lãi nhận được: ${interestStr} đ *(ghi nhận Thu nhập lãi)*\n` +
+          `📉 **Dư nợ gốc còn lại:** **${remainingStr} đ**\n\n` +
+          (result.settlementDetails.isFullySettled
+            ? `🎉 **CHÚC MỪNG:** BẠN ĐÃ THU HỒI TOÀN BỘ KHOẢN CHO VAY NÀY! 🏆`
+            : `💡 Tiền đã được cộng vào ví và Báo cáo tài chính đã cập nhật tự động.`)
+        : `✅ **THANH TOÁN KỲ NỢ THÀNH CÔNG!**\n` +
+          `──────────────────────────────\n` +
+          `📌 **Khoản nợ:** ${item.debtContract.name} (${item.debtContract.counterparty})\n` +
+          `🔹 **Kỳ thanh toán:** Kỳ ${item.period}\n` +
+          `💰 **Tổng tiền:** **${totalPaidStr} đ**\n` +
+          `   • Gốc hoàn trả: ${principalStr} đ *(giảm nợ)*\n` +
+          `   • Lãi phát sinh: ${interestStr} đ *(ghi nhận Chi phí lãi)*\n` +
+          `📉 **Dư nợ gốc còn lại:** **${remainingStr} đ**\n\n` +
+          (result.settlementDetails.isFullySettled
+            ? `🎉 **CHÚC MỪNG:** BẠN ĐÃ TẤT TOÁN XONG TOÀN BỘ KHOẢN NỢ NÀY! 🏆`
+            : `💡 Bảng kế toán và Tài sản ròng (Net Worth) của bạn đã được cập nhật tự động.`);
 
       await zaloBotService.sendMessage(chatId, receiptMsg);
     } catch (error: any) {

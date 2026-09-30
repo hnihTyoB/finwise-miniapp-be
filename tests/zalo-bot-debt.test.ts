@@ -213,11 +213,66 @@ describe('Zalo Bot Debt Commands & Reminder Pipeline', () => {
         },
       });
       expect(notif).not.toBeNull();
-      expect(notif?.title).toContain('Nhắc hạn khoản nợ');
+      expect(notif?.title).toContain('Nhắc hạn trả nợ');
+      expect(notif?.actionUrl).toBe(`/debts/${debtId}`);
 
       // Verify item transitioned to UPCOMING
       const itemAfter = await prisma.debtScheduleItem.findUnique({ where: { id: reminderItem.id } });
       expect(itemAfter?.status).toBe('UPCOMING');
+    });
+
+    it('should scan and detect T-3 loan receivable items and phrase notification for lender', async () => {
+      const todayBusiness = instantToBusinessDate(new Date());
+      const t3Business = addBusinessDays(todayBusiness, 3);
+
+      const loanContract = await prisma.debtContract.create({
+        data: {
+          userId,
+          walletId,
+          name: 'Cho bạn mượn tiền',
+          counterparty: 'Nguyễn Văn B',
+          type: 'LOAN_RECEIVABLE',
+          method: 'FIXED_ANNUITY',
+          status: 'ACTIVE',
+          principal: 5_000_000,
+          remainingPrincipal: 5_000_000,
+          annualInterestRate: 0,
+          termMonths: 1,
+          startDate: new Date(),
+        },
+      });
+
+      const loanItem = await prisma.debtScheduleItem.create({
+        data: {
+          debtContractId: loanContract.id,
+          userId,
+          period: 1,
+          dueDate: businessDateToPrismaDate(t3Business),
+          principalDue: 5_000_000,
+          interestDue: 0,
+          totalDue: 5_000_000,
+          remainingPrincipal: 0,
+          status: 'SCHEDULED',
+        },
+      });
+
+      const result = await debtReminderService.processDueReminders(new Date());
+      expect(result.t3Count).toBeGreaterThanOrEqual(1);
+
+      const notif = await prisma.notification.findFirst({
+        where: {
+          userId,
+          dedupKey: `DEBT_T3_${loanItem.id}_${t3Business}`,
+        },
+      });
+      expect(notif).not.toBeNull();
+      expect(notif?.title).toContain('Nhắc hạn thu nợ');
+      expect(notif?.message).toContain('khoản cho vay');
+      expect(notif?.actionUrl).toBe(`/debts/${loanContract.id}`);
+
+      // Clean up loan test data
+      await prisma.debtScheduleItem.delete({ where: { id: loanItem.id } });
+      await prisma.debtContract.delete({ where: { id: loanContract.id } });
     });
   });
 });

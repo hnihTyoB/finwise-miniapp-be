@@ -345,7 +345,7 @@ export class MailService {
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
             <p>Hello ${escapeHtml(fullName || 'there')},</p>
             <h2>${escapeHtml(notification.title)}</h2>
-            <p>${escapeHtml(notification.message)}</p>
+            <p style="white-space: pre-line; line-height: 1.6;">${escapeHtml(notification.message)}</p>
             ${actionHtml}
           </div>
         `,
