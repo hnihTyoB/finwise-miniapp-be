@@ -4,6 +4,7 @@ import { Prisma, TransactionType } from '@prisma/client';
 import app from '../src/app';
 import { prisma } from '../src/database/prisma.client';
 import { QueryParser, UserEntityContext } from '../src/modules/query/query-parser';
+import { businessDateToPrismaDate, instantToBusinessDate } from '../src/common/date-time/business-time';
 
 describe('Upgrade 5: Hybrid Natural Language to Deterministic DSL Query Engine', () => {
   describe('QueryParser Unit Tests', () => {
@@ -93,8 +94,7 @@ describe('Upgrade 5: Hybrid Natural Language to Deterministic DSL Query Engine',
         },
       });
       testCategoryId = category.id;
-
-      const now = new Date();
+      const now = businessDateToPrismaDate(instantToBusinessDate(new Date()));
       // Create 3 expense transactions in current month
       await prisma.transaction.createMany({
         data: [

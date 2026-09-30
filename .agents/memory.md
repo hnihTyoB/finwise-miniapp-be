@@ -106,7 +106,13 @@ File này chỉ lưu sự thật và quyết định dài hạn giúp các phiê
 - Script seed (prisma/seed.ts) được mở rộng để tự động tạo dữ liệu mẫu demo phong phú (Wallets, Transactions, Budgets, SavingGoals, Contributions, Notifications, Reminders) cho tài khoản user@finwise.local.
 - Dynamic RBAC (Role-Based Access Control) là kiến trúc phân quyền chính thức: Phân quyền dựa trên Permission (Role -> Permissions -> User), KHÔNG hardcode quyền theo tên Role.
 - QUY TẮC BẮT BUỘC: Tất cả tên quyền (Permission names) PHẢI được định nghĩa tập trung trong `src/common/constants/permission.constant.ts` (ở cả BE và FE), TUYỆT ĐỐI KHÔNG hardcode chuỗi string permission rải rác trong code.
-- Mọi route endpoint nghiệp vụ ở backend bắt buộc được bảo vệ bằng middleware `requirePermission(PERMISSIONS.*)`.
+- Mọi route endpoint nghiệp vụ ở backend bắt buộc được bảo vệ bằng middleware `requirePermission(PERMISSIONS.*)`. Toàn bộ các module mới (DEBT, BACKUP, HANDOVER, STATEMENT, ZALO_BOT) đều đã được chuẩn hóa bảo vệ 100% bằng RBAC:
+  - `DEBT`: `DEBT_READ`, `DEBT_CREATE`, `DEBT_UPDATE`, `DEBT_DELETE`, `DEBT_SETTLE`.
+  - `BACKUP`: `BACKUP_EXPORT`, `BACKUP_IMPORT`.
+  - `HANDOVER`: `HANDOVER_INITIATE`, `HANDOVER_CLAIM`.
+  - `STATEMENT`: `STATEMENT_READ`, `STATEMENT_EXPORT`.
+  - `ZALO_BOT`: `NOTIFICATION_READ` (link-status), `NOTIFICATION_UPDATE` (link-code, unlink). Endpoint webhook công khai dùng secret token qua `zaloWebhookAuthMiddleware`.
+  - Toàn bộ các quyền này được seed và cấp phát đầy đủ cho vai trò `USER`, `MANAGER`, `ADMIN`, `SUPER_ADMIN` trong `prisma/seed.ts` và database, đảm bảo người dùng và test suite không bị 403 Forbidden.
 - Các vai trò hệ thống mặc định/bất biến (Bootstrap & System protection) được định nghĩa tập trung qua `SYSTEM_ROLES` trong `src/common/constants/system-role.constant.ts` (ví dụ `SYSTEM_ROLES.USER` cho vai trò đăng ký mặc định, `SYSTEM_ROLES.ADMIN` cho vai trò quản trị bất biến), không dùng `SYSTEM_ROLES` để kiểm tra phân quyền.
 - Endpoint đăng nhập `POST /api/v1/auth/login` hỗ trợ linh hoạt cả email và số điện thoại thông qua trường `email` hoặc `account`, tự động chuẩn hóa định dạng số điện thoại Việt Nam và truy vấn role đi kèm.
 - Luồng Zalo Login (`POST /api/v1/auth/zalo-login`) bắt buộc số điện thoại phải được giải mã từ Zalo Server qua `phoneToken` hoặc Graph API (`isPhoneVerified = true`). Nghiêm cấm gán quyền hoặc liên kết tài khoản dựa trên số điện thoại client tự gửi chưa xác thực (trả về `409 Conflict PHONE_ALREADY_REGISTERED_UNVERIFIED` nếu trùng tài khoản). Các cuộc gọi HTTP ra Zalo Graph API bắt buộc giới hạn timeout tối đa 5 giây qua `AbortSignal.timeout(5000)`.
