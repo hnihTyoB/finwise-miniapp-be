@@ -3,7 +3,6 @@ import {
   NotificationSourceType,
   NotificationType,
 } from '@prisma/client';
-import { prisma } from '../../../database/prisma.client';
 import {
   addBusinessDays,
   businessDateToPrismaDate,
@@ -11,11 +10,12 @@ import {
   prismaDateToBusinessDate,
 } from '../../../common/date-time/business-time';
 import { NotificationService } from '../../notifications/notification.service';
-import { zaloBotService } from '../../../common/services/zalo-bot.service';
 import { LoggerService } from '../../../common/services/logger.service';
+import { DebtRepository } from '../debt.repository';
 
 export class DebtReminderService {
   private readonly notificationService = new NotificationService();
+  private readonly debtRepository = new DebtRepository();
   private readonly logger = new LoggerService('DebtReminderService');
 
   /**
@@ -36,25 +36,8 @@ export class DebtReminderService {
     let t0Count = 0;
     let overdueCount = 0;
 
-    // 1. Quét nhóm T-3: Ngày đến hạn đúng bằng hôm nay + 3 ngày
-    const t3Items = await prisma.debtScheduleItem.findMany({
-      where: {
-        dueDate: t3Date,
-        status: { in: ['SCHEDULED', 'UPCOMING'] },
-        debtContract: {
-          status: 'ACTIVE',
-          isArchived: false,
-        },
-      },
-      include: {
-        debtContract: true,
-        user: {
-          include: {
-            notificationSetting: true,
-          },
-        },
-      },
-    });
+    // 1. Quét nhóm T-3: Ngày đến hạn đúng bằng hôm nay + 3 ngày (Chỉ lấy SCHEDULED để không bị lặp mỗi 30s)
+    const t3Items = await this.debtRepository.findScheduledReminderItems(t3Date);
 
     for (const item of t3Items) {
       try {
@@ -63,12 +46,19 @@ export class DebtReminderService {
         const totalAmountStr = Number(item.totalDue).toLocaleString('vi-VN');
         const principalStr = Number(item.principalDue).toLocaleString('vi-VN');
         const interestStr = Number(item.interestDue).toLocaleString('vi-VN');
+        const isPayable = item.debtContract.type === 'DEBT_PAYABLE';
 
-        const title = `🔔 Nhắc hạn khoản nợ (Còn 3 ngày)`;
-        const message =
-          `Kỳ ${item.period} khoản "${item.debtContract.name}" (${item.debtContract.counterparty}) sắp đến hạn ngày ${dueDateStr}.\n` +
-          `• Tổng tiền: ${totalAmountStr} đ (Gốc: ${principalStr} đ, Lãi: ${interestStr} đ)\n` +
-          `👉 Gõ lệnh: /tra_no ${item.id} để thanh toán nhanh qua Zalo!`;
+        const title = isPayable
+          ? `🔔 Nhắc hạn trả nợ (Còn 3 ngày)`
+          : `🔔 Nhắc hạn thu nợ (Còn 3 ngày)`;
+
+        const message = isPayable
+          ? `Kỳ ${item.period} khoản nợ "${item.debtContract.name}" (${item.debtContract.counterparty}) sắp đến hạn ngày ${dueDateStr}.\n` +
+            `• Tổng tiền: ${totalAmountStr} đ (Gốc: ${principalStr} đ, Lãi: ${interestStr} đ)\n` +
+            `👉 Gõ lệnh: /tra_no ${item.id} để thanh toán nhanh qua Zalo!`
+          : `Kỳ ${item.period} khoản cho vay "${item.debtContract.name}" (${item.debtContract.counterparty}) sắp đến hạn thu hồi ngày ${dueDateStr}.\n` +
+            `• Số tiền dự kiến thu: ${totalAmountStr} đ (Gốc: ${principalStr} đ, Lãi: ${interestStr} đ)\n` +
+            `👉 Gõ lệnh: /tra_no ${item.id} để xác nhận khi đã nhận tiền!`;
 
         await this.notificationService.create({
           userId: item.userId,
@@ -78,6 +68,7 @@ export class DebtReminderService {
           message,
           sourceType: NotificationSourceType.DEBT,
           sourceId: item.debtContractId,
+          actionUrl: `/debts/${item.debtContractId}`,
           dedupKey,
           data: {
             debtContractId: item.debtContractId,
@@ -85,30 +76,12 @@ export class DebtReminderService {
             period: item.period,
             totalDue: item.totalDue.toString(),
             dueDate: dueDateStr,
+            debtType: item.debtContract.type,
           },
         });
 
-        // Đánh dấu kỳ chuyển sang UPCOMING
-        await prisma.debtScheduleItem.update({
-          where: { id: item.id },
-          data: { status: 'UPCOMING' },
-        });
-
-        // Bắn trực tiếp qua Zalo Bot nếu user đã kết nối
-        const chatId = item.user.notificationSetting?.zaloBotChatId;
-        if (chatId && zaloBotService.isConfigured()) {
-          await zaloBotService.sendMessage(
-            chatId,
-            `🔔 **NHẮC HẠN KHOẢN NỢ (CÒN 3 NGÀY)**\n\n` +
-            `📌 **Khoản:** ${item.debtContract.name} (${item.debtContract.counterparty})\n` +
-            `🔹 **Kỳ:** ${item.period}\n` +
-            `📅 **Hạn thanh toán:** ${dueDateStr}\n` +
-            `💰 **Số tiền phải trả:** ${totalAmountStr} đ\n` +
-            `   • Gốc: ${principalStr} đ | Lãi: ${interestStr} đ\n\n` +
-            `⚡ **Thanh toán 1-chạm:**\n` +
-            `Gõ: \`/tra_no ${item.id}\``,
-          );
-        }
+        // Đánh dấu kỳ chuyển sang UPCOMING để lần quét tiếp theo không lặp lại
+        await this.debtRepository.updateScheduleItemStatus(item.id, 'UPCOMING');
 
         t3Count += 1;
       } catch (err) {
@@ -116,37 +89,27 @@ export class DebtReminderService {
       }
     }
 
-    // 2. Quét nhóm T-0: Đến hạn hôm nay
-    const t0Items = await prisma.debtScheduleItem.findMany({
-      where: {
-        dueDate: todayDate,
-        status: { in: ['SCHEDULED', 'UPCOMING', 'DUE'] },
-        debtContract: {
-          status: 'ACTIVE',
-          isArchived: false,
-        },
-      },
-      include: {
-        debtContract: true,
-        user: {
-          include: {
-            notificationSetting: true,
-          },
-        },
-      },
-    });
+    // 2. Quét nhóm T-0: Đến hạn hôm nay (Chỉ lấy SCHEDULED hoặc UPCOMING để không bị lặp khi đã là DUE)
+    const t0Items = await this.debtRepository.findDueReminderItems(todayDate);
 
     for (const item of t0Items) {
       try {
         const dueDateStr = prismaDateToBusinessDate(item.dueDate);
         const dedupKey = `DEBT_T0_${item.id}_${dueDateStr}`;
         const totalAmountStr = Number(item.totalDue).toLocaleString('vi-VN');
+        const isPayable = item.debtContract.type === 'DEBT_PAYABLE';
 
-        const title = `⚠️ Đến hạn thanh toán khoản nợ hôm nay`;
-        const message =
-          `Hôm nay là hạn thanh toán kỳ ${item.period} khoản "${item.debtContract.name}".\n` +
-          `• Số tiền cần thanh toán: ${totalAmountStr} đ\n` +
-          `👉 Gõ lệnh: /tra_no ${item.id} để thanh toán ngay!`;
+        const title = isPayable
+          ? `⚠️ Đến hạn trả nợ hôm nay`
+          : `⚠️ Đến hạn thu hồi khoản cho vay hôm nay`;
+
+        const message = isPayable
+          ? `Hôm nay là hạn thanh toán kỳ ${item.period} khoản nợ "${item.debtContract.name}" (${item.debtContract.counterparty}).\n` +
+            `• Số tiền cần thanh toán: ${totalAmountStr} đ\n` +
+            `👉 Gõ lệnh: /tra_no ${item.id} để thanh toán ngay!`
+          : `Hôm nay là hạn thu nợ kỳ ${item.period} khoản cho vay "${item.debtContract.name}" (${item.debtContract.counterparty}).\n` +
+            `• Số tiền cần thu hồi: ${totalAmountStr} đ\n` +
+            `👉 Gõ lệnh: /tra_no ${item.id} để xác nhận khi đã nhận tiền!`;
 
         await this.notificationService.create({
           userId: item.userId,
@@ -156,6 +119,7 @@ export class DebtReminderService {
           message,
           sourceType: NotificationSourceType.DEBT,
           sourceId: item.debtContractId,
+          actionUrl: `/debts/${item.debtContractId}`,
           dedupKey,
           data: {
             debtContractId: item.debtContractId,
@@ -163,25 +127,12 @@ export class DebtReminderService {
             period: item.period,
             totalDue: item.totalDue.toString(),
             dueDate: dueDateStr,
+            debtType: item.debtContract.type,
           },
         });
 
-        await prisma.debtScheduleItem.update({
-          where: { id: item.id },
-          data: { status: 'DUE' },
-        });
-
-        const chatId = item.user.notificationSetting?.zaloBotChatId;
-        if (chatId && zaloBotService.isConfigured()) {
-          await zaloBotService.sendMessage(
-            chatId,
-            `⚠️ **ĐẾN HẠN THANH TOÁN HÔM NAY!**\n\n` +
-            `📌 **Khoản:** ${item.debtContract.name} (${item.debtContract.counterparty})\n` +
-            `🔹 **Kỳ:** ${item.period}\n` +
-            `💰 **Tổng số tiền:** ${totalAmountStr} đ\n\n` +
-            `👉 Gõ: \`/tra_no ${item.id}\` để xác nhận thanh toán ngay!`,
-          );
-        }
+        // Đánh dấu kỳ chuyển sang DUE
+        await this.debtRepository.updateScheduleItemStatus(item.id, 'DUE');
 
         t0Count += 1;
       } catch (err) {
@@ -190,54 +141,53 @@ export class DebtReminderService {
     }
 
     // 3. Quét nhóm Quá hạn (dueDate < todayDate)
-    const overdueItems = await prisma.debtScheduleItem.findMany({
-      where: {
-        dueDate: { lt: todayDate },
-        status: { in: ['SCHEDULED', 'UPCOMING', 'DUE'] },
-        debtContract: {
-          status: { in: ['ACTIVE', 'OVERDUE'] },
-          isArchived: false,
-        },
-      },
-      include: {
-        debtContract: true,
-        user: {
-          include: {
-            notificationSetting: true,
-          },
-        },
-      },
-    });
+    const overdueItems = await this.debtRepository.findOverdueReminderItems(todayDate);
 
     for (const item of overdueItems) {
       try {
         const dueDateStr = prismaDateToBusinessDate(item.dueDate);
         const dedupKey = `DEBT_OVERDUE_${item.id}_${todayBusiness}`;
         const totalAmountStr = Number(item.totalDue).toLocaleString('vi-VN');
+        const isPayable = item.debtContract.type === 'DEBT_PAYABLE';
 
         // Cập nhật trạng thái kỳ nợ sang OVERDUE
-        await prisma.debtScheduleItem.update({
-          where: { id: item.id },
-          data: { status: 'OVERDUE' },
-        });
+        await this.debtRepository.updateScheduleItemStatus(item.id, 'OVERDUE');
 
         // Cập nhật hợp đồng sang OVERDUE
         if (item.debtContract.status !== 'OVERDUE') {
-          await prisma.debtContract.update({
-            where: { id: item.debtContractId },
-            data: { status: 'OVERDUE' },
-          });
+          await this.debtRepository.updateContractStatus(item.debtContractId, 'OVERDUE');
         }
+
+        const title = isPayable
+          ? `🚨 Khoản nợ đã quá hạn thanh toán`
+          : `🚨 Khoản cho vay đã quá hạn thu hồi`;
+
+        const message = isPayable
+          ? `Kỳ ${item.period} khoản nợ "${item.debtContract.name}" (${item.debtContract.counterparty}) đã quá hạn ngày ${dueDateStr}!\n` +
+            `• Số tiền cần thanh toán: ${totalAmountStr} đ\n` +
+            `👉 Gõ lệnh: /tra_no ${item.id} để thanh toán ngay!`
+          : `Kỳ ${item.period} khoản cho vay "${item.debtContract.name}" (${item.debtContract.counterparty}) đã quá hạn ngày ${dueDateStr}!\n` +
+            `• Số tiền chưa thu hồi: ${totalAmountStr} đ\n` +
+            `👉 Hãy liên hệ ${item.debtContract.counterparty} và gõ: /tra_no ${item.id} khi nhận tiền!`;
 
         await this.notificationService.create({
           userId: item.userId,
           type: NotificationType.DEBT_PAYMENT_DUE,
           priority: NotificationPriority.CRITICAL,
-          title: `🚨 Khoản nợ đã quá hạn thanh toán`,
-          message: `Kỳ ${item.period} khoản "${item.debtContract.name}" (Hạn: ${dueDateStr}) đã quá hạn! Số tiền: ${totalAmountStr} đ`,
+          title,
+          message,
           sourceType: NotificationSourceType.DEBT,
           sourceId: item.debtContractId,
+          actionUrl: `/debts/${item.debtContractId}`,
           dedupKey,
+          data: {
+            debtContractId: item.debtContractId,
+            scheduleItemId: item.id,
+            period: item.period,
+            totalDue: item.totalDue.toString(),
+            dueDate: dueDateStr,
+            debtType: item.debtContract.type,
+          },
         });
 
         overdueCount += 1;

@@ -369,6 +369,7 @@ export class NotificationService {
     if (
       type === NotificationType.USER_REMINDER
       || type === NotificationType.RECURRING_PAYMENT_DUE
+      || type === NotificationType.DEBT_PAYMENT_DUE
     ) {
       return setting.reminderAlertsEnabled;
     }

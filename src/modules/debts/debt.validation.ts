@@ -18,7 +18,8 @@ const debtStatusSchema = z.enum([
 
 const principalSchema = z.coerce
   .number()
-  .positive('Số tiền gốc phải lớn hơn 0');
+  .positive('Số tiền gốc phải lớn hơn 0')
+  .max(100_000_000_000_000, 'Số tiền gốc tối đa là 100.000 tỷ VNĐ');
 
 const annualInterestRateSchema = z.coerce
   .number()
@@ -70,7 +71,7 @@ export const createDebtContractSchema = z.object({
 
 export const updateDebtContractSchema = z.object({
   name: z.string().trim().min(1, 'Tên khoản nợ không được để trống').max(255).optional(),
-  counterparty: z.string().trim().min(1).max(255).optional(),
+  counterparty: z.string().trim().min(1, 'Người/đơn vị liên quan không được để trống').max(255).optional(),
   walletId: z.string().uuid('ID ví không hợp lệ').nullable().optional(),
   notes: z.string().trim().max(2000).nullable().optional(),
 });
