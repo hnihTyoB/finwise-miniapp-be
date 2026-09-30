@@ -40,6 +40,7 @@ enum NotificationType {
   RECURRING_PAYMENT_DUE
   UNUSUAL_TRANSACTION
   USER_REMINDER
+  DEBT_PAYMENT_DUE
   SYSTEM
 }
 
@@ -70,6 +71,7 @@ enum NotificationSourceType {
   SAVING_GOAL
   TRANSACTION
   REMINDER
+  DEBT
   SYSTEM
 }
 
@@ -101,6 +103,36 @@ enum RecurringTransactionMissedRunPolicy {
 enum RecurringTransactionOccurrenceStatus {
   POSTED
   FAILED
+}
+
+enum DebtType {
+  DEBT_PAYABLE
+  LOAN_RECEIVABLE
+}
+
+enum AmortizationMethod {
+  REDUCING_BALANCE
+  FIXED_ANNUITY
+  INTEREST_ONLY
+}
+
+enum DebtStatus {
+  DRAFT
+  ACTIVE
+  OVERDUE
+  COMPLETED
+  DEFAULTED
+  CANCELLED
+}
+
+enum DebtScheduleStatus {
+  SCHEDULED
+  UPCOMING
+  DUE
+  PAID
+  PARTIALLY_PAID
+  OVERDUE
+  WAIVED
 }
 
 model User {
@@ -140,6 +172,8 @@ model User {
   webhookEndpoints              WebhookEndpoint[]
   asyncJobs                     AsyncJob[]
   statementJobs                 StatementJob[]
+  debtContracts                 DebtContract[]
+  debtScheduleItems             DebtScheduleItem[]
 
   @@index([roleId])
   @@index([deletedAt, isActive])
@@ -228,6 +262,7 @@ model Wallet {
   incomingTransfers             Transfer[]                     @relation("TransferDestinationWallet")
   recurringTransactionSchedules RecurringTransactionSchedule[]
   statementJobs                 StatementJob[]
+  debtContracts                 DebtContract[]
 
   @@unique([userId, name])
   @@index([userId, isArchived])
@@ -279,6 +314,7 @@ model Transaction {
   wallet              Wallet                          @relation(fields: [walletId], references: [id], onDelete: Restrict)
   category            Category                        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   recurringOccurrence RecurringTransactionOccurrence?
+  debtScheduleItems   DebtScheduleItem[]
 
   @@index([walletId])
   @@index([categoryId])
@@ -851,3 +887,64 @@ model StatementJob {
   @@index([expiresAt])
   @@map("statement_jobs")
 }
+
+model DebtContract {
+  id                 String             @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  userId             String             @map("user_id") @db.Uuid
+  walletId           String?            @map("wallet_id") @db.Uuid
+  name               String             @db.VarChar(255)
+  counterparty       String             @db.VarChar(255)
+  type               DebtType
+  method             AmortizationMethod
+  status             DebtStatus         @default(ACTIVE)
+  principal          Decimal            @db.Decimal(18, 2)
+  remainingPrincipal Decimal            @map("remaining_principal") @db.Decimal(18, 2)
+  annualInterestRate Decimal            @map("annual_interest_rate") @db.Decimal(5, 2)
+  termMonths         Int                @map("term_months")
+  startDate          DateTime           @map("start_date") @db.Date
+  endDate            DateTime?          @map("end_date") @db.Date
+  notes              String?            @db.Text
+  isArchived         Boolean            @default(false) @map("is_archived")
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wallet        Wallet?            @relation(fields: [walletId], references: [id], onDelete: SetNull)
+  scheduleItems DebtScheduleItem[]
+
+  @@index([userId, status, isArchived])
+  @@index([userId, type])
+  @@index([walletId])
+  @@map("debt_contracts")
+}
+
+model DebtScheduleItem {
+  id                 String             @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  debtContractId     String             @map("debt_contract_id") @db.Uuid
+  userId             String             @map("user_id") @db.Uuid
+  period             Int
+  dueDate            DateTime           @map("due_date") @db.Date
+  principalDue       Decimal            @map("principal_due") @db.Decimal(18, 2)
+  interestDue        Decimal            @map("interest_due") @db.Decimal(18, 2)
+  totalDue           Decimal            @map("total_due") @db.Decimal(18, 2)
+  principalPaid      Decimal            @default(0) @map("principal_paid") @db.Decimal(18, 2)
+  interestPaid       Decimal            @default(0) @map("interest_paid") @db.Decimal(18, 2)
+  remainingPrincipal Decimal            @map("remaining_principal") @db.Decimal(18, 2)
+  status             DebtScheduleStatus @default(SCHEDULED)
+  paidAt             DateTime?          @map("paid_at") @db.Timestamptz(3)
+  transactionId      String?            @map("transaction_id") @db.Uuid
+  notes              String?            @db.VarChar(255)
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  debtContract DebtContract @relation(fields: [debtContractId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transaction  Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+
+  @@unique([debtContractId, period])
+  @@index([userId, status, dueDate])
+  @@index([debtContractId, dueDate])
+  @@index([transactionId])
+  @@map("debt_schedule_items")
+}
+

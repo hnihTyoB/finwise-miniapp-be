@@ -6,6 +6,7 @@ import { RecurringTransactionService } from '../recurring-transactions/recurring
 import { BudgetService } from '../budgets/budget.service';
 import { SubscriptionService } from '../subscriptions/subscription.service';
 import { auditLogArchiveService } from '../audit-logs/audit-log-archive.service';
+import { debtReminderService } from '../debts/services/debt-reminder.service';
 
 import { lockService } from '../../common/services/lock.service';
 import { prisma } from '../../database/prisma.client';
@@ -86,6 +87,12 @@ export class NotificationWorker {
         await this.deliveryService.processDue(now);
       } catch (error) {
         console.error('Notification worker failed to process deliveries', error);
+      }
+
+      try {
+        await debtReminderService.processDueReminders(now);
+      } catch (error) {
+        console.error('Notification worker failed to process debt reminders', error);
       }
 
       if (
