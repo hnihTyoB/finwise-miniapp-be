@@ -154,6 +154,18 @@ async function main() {
     // STATEMENT_EXPORT
     { name: 'STATEMENT_READ', resource: 'STATEMENT', action: 'READ', description: 'Xem danh sách và tải sao kê giao dịch', isSystem: true },
     { name: 'STATEMENT_EXPORT', resource: 'STATEMENT', action: 'EXPORT', description: 'Khởi tạo xuất sao kê giao dịch bất đồng bộ', isSystem: true },
+    // DEBT
+    { name: 'DEBT_READ', resource: 'DEBT', action: 'READ', description: 'Xem danh sách và chi tiết hợp đồng nợ/cho vay', isSystem: true },
+    { name: 'DEBT_CREATE', resource: 'DEBT', action: 'CREATE', description: 'Tạo hợp đồng nợ hoặc cho vay mới', isSystem: true },
+    { name: 'DEBT_UPDATE', resource: 'DEBT', action: 'UPDATE', description: 'Chỉnh sửa thông tin hợp đồng nợ/cho vay', isSystem: true },
+    { name: 'DEBT_DELETE', resource: 'DEBT', action: 'DELETE', description: 'Lưu trữ hoặc xóa hợp đồng nợ/cho vay', isSystem: true },
+    { name: 'DEBT_SETTLE', resource: 'DEBT', action: 'SETTLE', description: 'Thanh toán kỳ hạn hoặc tất toán trước hạn khoản nợ', isSystem: true },
+    // BACKUP
+    { name: 'BACKUP_EXPORT', resource: 'BACKUP', action: 'EXPORT', description: 'Xuất file sao lưu dữ liệu toàn bộ tài khoản', isSystem: true },
+    { name: 'BACKUP_IMPORT', resource: 'BACKUP', action: 'IMPORT', description: 'Nhập và phục hồi dữ liệu từ file sao lưu', isSystem: true },
+    // HANDOVER
+    { name: 'HANDOVER_INITIATE', resource: 'HANDOVER', action: 'INITIATE', description: 'Khởi tạo phiên chuyển giao quyền sở hữu tài khoản', isSystem: true },
+    { name: 'HANDOVER_CLAIM', resource: 'HANDOVER', action: 'CLAIM', description: 'Kết nối và tiếp nhận quyền sở hữu tài khoản', isSystem: true },
   ];
 
   const permissionMap: Record<string, string> = {};
@@ -227,6 +239,10 @@ async function main() {
     'API_KEY_READ', 'API_KEY_CREATE', 'API_KEY_DELETE',
     'WEBHOOK_READ', 'WEBHOOK_CREATE', 'WEBHOOK_UPDATE', 'WEBHOOK_DELETE', 'WEBHOOK_TEST',
     'JOB_READ', 'JOB_CREATE',
+    'STATEMENT_READ', 'STATEMENT_EXPORT',
+    'DEBT_READ', 'DEBT_CREATE', 'DEBT_UPDATE', 'DEBT_DELETE', 'DEBT_SETTLE',
+    'BACKUP_EXPORT', 'BACKUP_IMPORT',
+    'HANDOVER_INITIATE', 'HANDOVER_CLAIM',
   ];
 
   for (const permName of userPermissions) {
