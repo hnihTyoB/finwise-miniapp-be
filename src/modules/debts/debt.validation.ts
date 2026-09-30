@@ -56,6 +56,20 @@ export const previewAmortizationScheduleSchema = z.object({
   method: amortizationMethodSchema,
 });
 
+const optionalWalletIdSchema = z
+  .union([z.string().uuid('ID ví không hợp lệ'), z.literal('')])
+  .nullable()
+  .optional()
+  .transform((val) => (val === '' ? null : val));
+
+const optionalNotesSchema = z
+  .string()
+  .trim()
+  .max(2000, 'Ghi chú tối đa 2000 ký tự')
+  .nullable()
+  .optional()
+  .transform((val) => (val === '' ? null : val));
+
 export const createDebtContractSchema = z.object({
   name: z.string().trim().min(1, 'Tên khoản nợ không được để trống').max(255),
   counterparty: z.string().trim().min(1, 'Người/đơn vị liên quan không được để trống').max(255),
@@ -65,15 +79,15 @@ export const createDebtContractSchema = z.object({
   annualInterestRate: annualInterestRateSchema,
   termMonths: termMonthsSchema,
   startDate: dateSchema,
-  walletId: z.string().uuid('ID ví không hợp lệ').nullable().optional(),
-  notes: z.string().trim().max(2000).nullable().optional(),
+  walletId: optionalWalletIdSchema,
+  notes: optionalNotesSchema,
 });
 
 export const updateDebtContractSchema = z.object({
   name: z.string().trim().min(1, 'Tên khoản nợ không được để trống').max(255).optional(),
   counterparty: z.string().trim().min(1, 'Người/đơn vị liên quan không được để trống').max(255).optional(),
-  walletId: z.string().uuid('ID ví không hợp lệ').nullable().optional(),
-  notes: z.string().trim().max(2000).nullable().optional(),
+  walletId: optionalWalletIdSchema,
+  notes: optionalNotesSchema,
 });
 
 export const findDebtsQuerySchema = z.object({
