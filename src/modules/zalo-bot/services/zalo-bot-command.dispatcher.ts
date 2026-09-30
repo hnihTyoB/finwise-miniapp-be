@@ -4,9 +4,13 @@ import { zaloBotLinkService } from './zalo-bot-link.service';
 import { zaloBotFastEntryService } from './zalo-bot-fast-entry.service';
 import { zaloBotContextService } from './zalo-bot-context.service';
 import { LoggerService } from '../../../common/services/logger.service';
+import { prisma } from '../../../database/prisma.client';
+import { DebtSettlementService } from '../../debts/services/debt-settlement.service';
+import { prismaDateToBusinessDate } from '../../../common/date-time/business-time';
 
 export class ZaloBotCommandDispatcher {
   private readonly logger = new LoggerService('ZaloBotCommandDispatcher');
+  private readonly debtSettlementService = new DebtSettlementService();
 
   /**
    * Xử lý tin nhắn đến từ người dùng và điều phối lệnh phù hợp.
@@ -68,7 +72,21 @@ export class ZaloBotCommandDispatcher {
       return;
     }
 
-    // 6. Tài khoản đã liên kết → Conversational Fast-Entry
+    // 6. Lệnh quản lý Nợ: /no hoặc /debt hoặc "xem no"
+    if (lower === '/no' || lower === '/debt' || lower === 'xem no' || lower === 'xem nợ') {
+      await this.handleDebtListCommand(chatId, linkedUser.userId);
+      return;
+    }
+
+    // 7. Lệnh thanh toán 1-chạm: /tra_no <id> hoặc /tra <id>
+    const payMatch = trimmed.match(/^(\/tra_no|\/tra)\s+([a-f0-9-]{36})$/i);
+    if (payMatch) {
+      const scheduleItemId = payMatch[2];
+      await this.handlePayDebtCommand(chatId, linkedUser.userId, scheduleItemId);
+      return;
+    }
+
+    // 8. Tài khoản đã liên kết → Conversational Fast-Entry
     const { replyText, transactionId } = await zaloBotFastEntryService.handleMessage(
       chatId,
       linkedUser.userId,
@@ -118,36 +136,32 @@ export class ZaloBotCommandDispatcher {
     if (!settings || settings.length === 0) {
       await zaloBotService.sendMessage(
         chatId,
-        '⚠️ **Tài khoản Zalo này chưa được liên kết với FinWise.**\n\n' +
-        'Hãy mở FinWise Mini App → Cài đặt thông báo để lấy mã liên kết 1 chạm nhé!',
+        'ℹ️ Chưa tìm thấy thông tin ví của tài khoản liên kết.',
       );
       return;
     }
 
-    const lines: string[] = ['📊 **TỔNG QUAN TÀI CHÍNH FINWISE**', ''];
+    const lines: string[] = ['📊 **TỔNG HỢP SỐ DƯ TÀI KHOẢN FINWISE**\n'];
 
-    for (const item of settings) {
-      const user = item.user;
-      lines.push(`👤 **Tài khoản:** ${user.fullName || 'Người dùng'}`);
+    for (const s of settings) {
+      const { fullName, wallets } = s.user;
+      lines.push(`👤 **${fullName || 'Người dùng'}**:`);
 
-      if (!user.wallets || user.wallets.length === 0) {
-        lines.push('  *(Chưa có ví tài chính)*');
+      if (!wallets || wallets.length === 0) {
+        lines.push('  *(Chưa có ví nào hoạt động)*');
       } else {
-        const balancesByCurrency: Record<string, number> = {};
-        for (const w of user.wallets) {
+        let total = 0;
+        for (const w of wallets) {
           const bal = Number(w.balance);
-          balancesByCurrency[w.currency] = (balancesByCurrency[w.currency] ?? 0) + bal;
-          lines.push(`  • ${w.name}: **${new Intl.NumberFormat('vi-VN').format(bal)} ${w.currency}**`);
+          total += bal;
+          lines.push(`  • **${w.name}**: ${bal.toLocaleString('vi-VN')} ${w.currency}`);
         }
-        const summaryParts = Object.entries(balancesByCurrency)
-          .map(([curr, total]) => `${new Intl.NumberFormat('vi-VN').format(total)} ${curr}`)
-          .join(', ');
-        lines.push(`  👉 **Tổng cộng: ${summaryParts}**`);
+        lines.push(`  💰 **Tổng cộng**: **${total.toLocaleString('vi-VN')} VND**`);
       }
       lines.push('');
     }
 
-    lines.push('💡 *Gõ /help để xem các lệnh khác.*');
+    lines.push('💡 Nhắn tin tự nhiên như `Ăn sáng 30k` để ghi chép nhanh!');
     await zaloBotService.sendMessage(chatId, lines.join('\n'));
   }
 
@@ -191,6 +205,9 @@ export class ZaloBotCommandDispatcher {
       `• Gõ \`hoàn tác\` hoặc \`hủy\` để đảo ngược giao dịch vừa tạo\n` +
       `• Gõ \`sửa thành 40k\` để đổi số tiền\n` +
       `• Gõ \`đổi ví VCB\` để đổi ví thanh toán\n\n` +
+      `📌 **Quản lý Nợ & Trả nợ:**\n` +
+      `• **/no** : Xem tổng quan nợ vay, cho mượn & kỳ sắp đến hạn\n` +
+      `• **/tra_no <mã_kỳ>** : Xác nhận thanh toán kỳ nợ 1-chạm\n\n` +
       `📌 **Các lệnh khác:**\n` +
       `• **/status** : Xem tổng số dư các ví\n` +
       `• **/link <mã>** : Liên kết tài khoản FinWise (VD: /link FW-8492)\n` +
@@ -198,6 +215,156 @@ export class ZaloBotCommandDispatcher {
       `• **/help** : Xem hướng dẫn sử dụng bot`;
 
     await zaloBotService.sendMessage(chatId, text);
+  }
+
+  /**
+   * Tra cứu danh sách hợp đồng nợ và các kỳ sắp đến hạn qua lệnh /no
+   */
+  private async handleDebtListCommand(chatId: string, userId: string): Promise<void> {
+    const contracts = await prisma.debtContract.findMany({
+      where: {
+        userId,
+        isArchived: false,
+        status: { in: ['ACTIVE', 'OVERDUE'] },
+      },
+      include: {
+        scheduleItems: {
+          where: {
+            status: { in: ['SCHEDULED', 'UPCOMING', 'DUE', 'OVERDUE'] },
+          },
+          orderBy: { dueDate: 'asc' },
+          take: 3,
+        },
+      },
+    });
+
+    if (contracts.length === 0) {
+      await zaloBotService.sendMessage(
+        chatId,
+        `🎉 **BẠN KHÔNG CÓ KHOẢN NỢ NÀO ĐANG HOẠT ĐỘNG!**\n\n` +
+        `Bạn hiện không có khoản nợ vay hay cho mượn nào cần theo dõi trên FinWise. Thật tuyệt vời! 👏`,
+      );
+      return;
+    }
+
+    let totalBorrowing = 0;
+    let totalLending = 0;
+
+    for (const c of contracts) {
+      const rem = Number(c.remainingPrincipal);
+      if (c.type === 'DEBT_PAYABLE') {
+        totalBorrowing += rem;
+      } else {
+        totalLending += rem;
+      }
+    }
+
+    const lines: string[] = [
+      `📊 **TỔNG QUAN NỢ & CHO VAY (FINWISE)**`,
+      `──────────────────────────────`,
+      `🔴 **Nợ đang vay**: **${totalBorrowing.toLocaleString('vi-VN')} đ**`,
+      `🟢 **Đang cho mượn**: **${totalLending.toLocaleString('vi-VN')} đ**`,
+      `⚖️ **Nghĩa vụ thuần**: **${(totalBorrowing - totalLending).toLocaleString('vi-VN')} đ**\n`,
+      `📌 **CÁC KỲ SẮP ĐẾN HẠN CẦN THANH TOÁN:**`,
+    ];
+
+    let hasUpcoming = false;
+
+    for (const c of contracts) {
+      for (const item of c.scheduleItems) {
+        hasUpcoming = true;
+        const dueDate = prismaDateToBusinessDate(item.dueDate);
+        const totalDue = Number(item.totalDue).toLocaleString('vi-VN');
+        const statusBadge = item.status === 'OVERDUE' ? '🚨 QUÁ HẠN' : '⏰ ĐẾN HẠN';
+
+        lines.push(
+          `\n• **${c.name}** (${c.counterparty})`,
+          `  🔹 Kỳ: ${item.period} | Hạn: ${dueDate} (${statusBadge})`,
+          `  💰 Số tiền: **${totalDue} đ**`,
+          `  👉 Gõ: \`/tra_no ${item.id}\``,
+        );
+      }
+    }
+
+    if (!hasUpcoming) {
+      lines.push('\n*(Không có kỳ nào sắp đến hạn trong thời gian gần)*');
+    }
+
+    await zaloBotService.sendMessage(chatId, lines.join('\n'));
+  }
+
+  /**
+   * Xử lý thanh toán 1-chạm qua lệnh /tra_no <scheduleItemId>
+   */
+  private async handlePayDebtCommand(
+    chatId: string,
+    userId: string,
+    scheduleItemId: string,
+  ): Promise<void> {
+    const item = await prisma.debtScheduleItem.findFirst({
+      where: { id: scheduleItemId, userId },
+      include: { debtContract: true },
+    });
+
+    if (!item) {
+      await zaloBotService.sendMessage(
+        chatId,
+        '❌ **Không tìm thấy kỳ nợ này!** Vui lòng kiểm tra lại mã kỳ nợ hoặc gõ **/no** để xem danh sách.',
+      );
+      return;
+    }
+
+    if (item.status === 'PAID') {
+      await zaloBotService.sendMessage(
+        chatId,
+        `ℹ️ Kỳ số **${item.period}** của khoản "${item.debtContract.name}" đã được thanh toán trước đó rồi nhé!`,
+      );
+      return;
+    }
+
+    try {
+      const result = await this.debtSettlementService.payInstallment(
+        userId,
+        item.debtContractId,
+        item.period,
+        {},
+      );
+
+      const totalPaidStr = result.settlementDetails.totalAmountPaid.toLocaleString('vi-VN');
+      const principalStr = result.settlementDetails.principalPaid.toLocaleString('vi-VN');
+      const interestStr = result.settlementDetails.interestPaid.toLocaleString('vi-VN');
+      const remainingStr = Number(result.contract.remainingPrincipal).toLocaleString('vi-VN');
+
+      const receiptMsg =
+        `✅ **THANH TOÁN KỲ NỢ THÀNH CÔNG!**\n` +
+        `──────────────────────────────\n` +
+        `📌 **Khoản nợ:** ${item.debtContract.name} (${item.debtContract.counterparty})\n` +
+        `🔹 **Kỳ thanh toán:** Kỳ ${item.period}\n` +
+        `💰 **Tổng tiền:** **${totalPaidStr} đ**\n` +
+        `   • Gốc hoàn trả: ${principalStr} đ *(giảm nợ)*\n` +
+        `   • Lãi phát sinh: ${interestStr} đ *(ghi nhận Chi phí lãi)*\n` +
+        `📉 **Dư nợ gốc còn lại:** **${remainingStr} đ**\n\n` +
+        (result.settlementDetails.isFullySettled
+          ? `🎉 **CHÚC MỪNG:** BẠN ĐÃ TẤT TOÁN XONG TOÀN BỘ KHOẢN NỢ NÀY! 🏆`
+          : `💡 Bảng kế toán và Tài sản ròng (Net Worth) của bạn đã được cập nhật tự động.`);
+
+      await zaloBotService.sendMessage(chatId, receiptMsg);
+    } catch (error: any) {
+      this.logger.error(`Failed to pay installment ${scheduleItemId} via Zalo`, error);
+
+      if (error?.code === 'INSUFFICIENT_BALANCE') {
+        await zaloBotService.sendMessage(
+          chatId,
+          `⚠️ **Số dư ví không đủ!**\n\n` +
+          `Ví thanh toán của bạn hiện không đủ tiền để chi trả cho kỳ nợ này. Vui lòng nạp thêm tiền vào ví hoặc mở **FinWise Mini App** để đổi ví thanh toán nhé!`,
+        );
+      } else {
+        await zaloBotService.sendMessage(
+          chatId,
+          `❌ **Thanh toán thất bại:** ${error?.message || 'Lỗi hệ thống khi hạch toán. Vui lòng thử lại sau.'}`,
+        );
+      }
+    }
   }
 
   // ─── Helper ──────────────────────────────────────────────────────────────────
