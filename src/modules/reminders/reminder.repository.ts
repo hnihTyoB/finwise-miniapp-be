@@ -170,7 +170,7 @@ export class ReminderRepository {
           }
 
           let title = reminder.title;
-          let message = reminder.message ?? 'A scheduled reminder is due.';
+          let message = reminder.message ?? 'Đã đến thời gian nhắc nhở theo lịch.';
           if (reminder.actionUrl === '/transactions?daily=1') {
             const template = await transaction.notificationTemplate.findFirst({
               where: {

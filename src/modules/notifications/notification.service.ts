@@ -186,8 +186,8 @@ export class NotificationService {
         ...common,
         type: NotificationType.BUDGET_EXCEEDED,
         priority: NotificationPriority.CRITICAL,
-        title: `Budget exceeded: ${candidate.name}`,
-        message: `Spending has reached ${usage.toFixed(0)}% of this budget.`,
+        title: `Cảnh báo vượt ngân sách: ${candidate.name}`,
+        message: `Chi tiêu đã vượt quá ngân sách (${usage.toFixed(0)}%).`,
         dedupKey: `budget:${candidate.id}:exceeded:${keySuffix}`,
       });
     }
@@ -208,8 +208,8 @@ export class NotificationService {
         ...common,
         type: NotificationType.BUDGET_NEAR_LIMIT,
         priority: NotificationPriority.HIGH,
-        title: `Budget nearing limit: ${candidate.name}`,
-        message: `Spending has reached ${usage.toFixed(0)}% of this budget.`,
+        title: `Ngân sách gần chạm hạn mức: ${candidate.name}`,
+        message: `Chi tiêu đã đạt ${usage.toFixed(0)}% ngân sách này. Hãy cân đối chi tiêu nhé!`,
         dedupKey: `budget:${candidate.id}:near:${keySuffix}`,
       });
     }
@@ -255,8 +255,8 @@ export class NotificationService {
         ...common,
         type: NotificationType.SAVING_GOAL_ACHIEVED,
         priority: NotificationPriority.HIGH,
-        title: `Saving goal achieved: ${candidate.name}`,
-        message: 'Congratulations! You have reached this saving goal.',
+        title: `Mục tiêu tiết kiệm hoàn thành: ${candidate.name}`,
+        message: 'Chúc mừng bạn! Bạn đã hoàn thành mục tiêu tiết kiệm này.',
         dedupKey: `saving-goal:${candidate.id}:achieved:${targetKey}`,
       });
       return;
@@ -267,8 +267,8 @@ export class NotificationService {
         ...common,
         type: NotificationType.SAVING_GOAL_NEAR_TARGET,
         priority: NotificationPriority.NORMAL,
-        title: `Saving goal almost reached: ${candidate.name}`,
-        message: `You have completed ${progress.toFixed(0)}% of this saving goal.`,
+        title: `Mục tiêu tiết kiệm sắp đạt: ${candidate.name}`,
+        message: `Bạn đã hoàn thành ${progress.toFixed(0)}% mục tiêu tiết kiệm này.`,
         dedupKey: `saving-goal:${candidate.id}:near:${targetKey}`,
       });
     }
@@ -281,8 +281,8 @@ export class NotificationService {
         ...common,
         type: NotificationType.SAVING_GOAL_DUE_SOON,
         priority: NotificationPriority.HIGH,
-        title: `Saving goal deadline approaching: ${candidate.name}`,
-        message: `The target date is ${prismaDateToBusinessDate(candidate.targetDate)}.`,
+        title: `Hạn mục tiêu tiết kiệm đang đến gần: ${candidate.name}`,
+        message: `Hạn hoàn thành mục tiêu là ngày ${prismaDateToBusinessDate(candidate.targetDate)}.`,
         dedupKey: `saving-goal:${candidate.id}:due:${prismaDateToBusinessDate(candidate.targetDate)}`,
       });
     }
@@ -323,7 +323,7 @@ export class NotificationService {
         userId,
         type: NotificationType.UNUSUAL_TRANSACTION,
         priority: evaluation.severity === 'CRITICAL' ? NotificationPriority.CRITICAL : NotificationPriority.HIGH,
-        title: 'Unusual transaction detected',
+        title: 'Phát hiện chi tiêu bất thường',
         message: evaluation.explanation,
         sourceType: NotificationSourceType.TRANSACTION,
         sourceId: transaction.id,
