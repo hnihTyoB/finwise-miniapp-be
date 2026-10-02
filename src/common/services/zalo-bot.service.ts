@@ -1,29 +1,74 @@
 import { envConfig } from '../../config/env.config';
-import { mailConfig } from '../../config/mail.config';
+
+/**
+ * Chuyển đổi các tiêu đề và nội dung thông báo hệ thống sang tiếng Việt nếu cần.
+ */
+function toVietnameseText(text: string): string {
+  if (!text) return '';
+  let result = text;
+
+  // Title mappings
+  result = result.replace(/^Budget exceeded:\s*/i, 'Cảnh báo vượt ngân sách: ');
+  result = result.replace(/^Budget nearing limit:\s*/i, 'Ngân sách gần chạm hạn mức: ');
+  result = result.replace(/^Saving goal achieved:\s*/i, 'Mục tiêu tiết kiệm hoàn thành: ');
+  result = result.replace(/^Saving goal almost reached:\s*/i, 'Mục tiêu tiết kiệm sắp đạt: ');
+  result = result.replace(/^Saving goal deadline approaching:\s*/i, 'Hạn mục tiêu tiết kiệm đang đến gần: ');
+  result = result.replace(/^Unusual transaction detected/i, 'Phát hiện chi tiêu bất thường');
+  result = result.replace(/^Recurring transaction paused/i, 'Giao dịch định kỳ bị tạm dừng');
+  result = result.replace(/^Daily transaction reminder/i, 'Nhắc nhở ghi chép giao dịch hôm nay');
+
+  // Message mappings
+  result = result.replace(
+    /^Spending has reached (\d+)% of this budget\./i,
+    'Chi tiêu đã đạt $1% ngân sách này.',
+  );
+  result = result.replace(
+    /^Congratulations! You have reached this saving goal\./i,
+    'Chúc mừng bạn! Bạn đã hoàn thành mục tiêu tiết kiệm này.',
+  );
+  result = result.replace(
+    /^You have completed (\d+)% of this saving goal\./i,
+    'Bạn đã hoàn thành $1% mục tiêu tiết kiệm này.',
+  );
+  result = result.replace(
+    /^The target date is\s*(\S+)\.?/i,
+    'Hạn hoàn thành mục tiêu là ngày $1.',
+  );
+  result = result.replace(
+    /^A recurring transaction could not be posted:\s*/i,
+    'Không thể thực hiện giao dịch định kỳ: ',
+  );
+  result = result.replace(
+    /^A scheduled reminder is due\./i,
+    'Đã đến thời gian nhắc nhở theo lịch.',
+  );
+  result = result.replace(
+    /^You haven't recorded any transactions today\. Take a few minutes to log your spending to keep your budget accurate!/i,
+    'Hôm nay bạn chưa ghi nhận giao dịch nào. Hãy dành ít phút cập nhật chi tiêu để quản lý ngân sách chính xác nhé!',
+  );
+
+  return result;
+}
 
 /**
  * Định dạng text thông báo cho Zalo Bot theo Markdown của Zalo Bot Platform.
+ * Đảm bảo thông báo bằng tiếng Việt và không chứa liên kết ngoại vi 'Mở trong FinWise'.
  * Tham khảo: https://bot.zapps.me/docs/apis/sendMessage/
  */
 export function formatZaloNotificationText(
   title: string,
   message: string,
-  actionUrl?: string | null,
+  _actionUrl?: string | null,
 ): string {
   const lines: string[] = [];
 
-  const prefix = /^[\p{Emoji}\u2000-\u32ff]/u.test(title) ? '' : '🔔 ';
-  lines.push(`${prefix}**${title}**`);
-  lines.push('');
-  lines.push(message);
+  const viTitle = toVietnameseText(title);
+  const viMessage = toVietnameseText(message);
 
-  if (actionUrl) {
-    const fullUrl = actionUrl.startsWith('http')
-      ? actionUrl
-      : `${mailConfig.appUrl}${actionUrl.startsWith('/') ? '' : '/'}${actionUrl}`;
-    lines.push('');
-    lines.push(`👉 [Mở trong FinWise](${fullUrl})`);
-  }
+  const prefix = /^[\p{Emoji}\u2000-\u32ff]/u.test(viTitle) ? '' : '🔔 ';
+  lines.push(`${prefix}**${viTitle}**`);
+  lines.push('');
+  lines.push(viMessage);
 
   return lines.join('\n');
 }
