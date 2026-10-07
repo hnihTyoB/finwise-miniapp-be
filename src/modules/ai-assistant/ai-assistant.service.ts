@@ -200,13 +200,18 @@ export class AIAssistantService {
       : null;
 
     const { categoryId: _categoryId, ...extractedReceipt } = response.data;
+    const defaultWarning =
+      input.languageHint === 'vi'
+        ? 'Vui lòng đối chiếu các giá trị đã trích xuất với hóa đơn gốc trước khi tạo giao dịch.'
+        : 'Please verify extracted values against the original receipt before creating a transaction.';
+
     return {
       data: {
         ...extractedReceipt,
         category,
         warnings: [
           ...response.data.warnings,
-          'Please verify extracted values against the original receipt before creating a transaction.',
+          defaultWarning,
         ],
       },
       meta: response.meta,
