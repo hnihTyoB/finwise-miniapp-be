@@ -13,6 +13,11 @@ enum TransactionType {
   EXPENSE
 }
 
+enum WalletType {
+  STANDARD
+  SAVINGS_ACCOUNT
+}
+
 enum BudgetType {
   OVERALL
   CATEGORY
@@ -41,6 +46,8 @@ enum NotificationType {
   UNUSUAL_TRANSACTION
   USER_REMINDER
   DEBT_PAYMENT_DUE
+  SAVINGS_DEPOSIT_DUE_SOON
+  SAVINGS_DEPOSIT_MATURED
   SYSTEM
 }
 
@@ -72,6 +79,7 @@ enum NotificationSourceType {
   TRANSACTION
   REMINDER
   DEBT
+  SAVINGS_DEPOSIT
   SYSTEM
 }
 
@@ -174,6 +182,7 @@ model User {
   statementJobs                 StatementJob[]
   debtContracts                 DebtContract[]
   debtScheduleItems             DebtScheduleItem[]
+  termDeposits                  TermDeposit[]
 
   @@index([roleId])
   @@index([deletedAt, isActive])
@@ -243,18 +252,19 @@ model AuditLog {
 }
 
 model Wallet {
-  id          String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
-  userId      String   @map("user_id") @db.Uuid
+  id          String     @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  userId      String     @map("user_id") @db.Uuid
   name        String
-  balance     Decimal  @default(0) @db.Decimal(18, 2)
-  currency    String   @default("VND") @db.VarChar(3)
+  balance     Decimal    @default(0) @db.Decimal(18, 2)
+  currency    String     @default("VND") @db.VarChar(3)
+  type        WalletType @default(STANDARD)
   icon        String?
   color       String?
   description String?
-  isDefault   Boolean  @default(false) @map("is_default")
-  isArchived  Boolean  @default(false) @map("is_archived")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  isDefault   Boolean    @default(false) @map("is_default")
+  isArchived  Boolean    @default(false) @map("is_archived")
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user                          User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions                  Transaction[]
@@ -263,6 +273,8 @@ model Wallet {
   recurringTransactionSchedules RecurringTransactionSchedule[]
   statementJobs                 StatementJob[]
   debtContracts                 DebtContract[]
+  termDeposit                   TermDeposit?                   @relation("WalletTermDeposit")
+  targetTermDeposits            TermDeposit[]                  @relation("TargetWalletTermDeposit")
 
   @@unique([userId, name])
   @@index([userId, isArchived])
@@ -946,5 +958,72 @@ model DebtScheduleItem {
   @@index([debtContractId, dueDate])
   @@index([transactionId])
   @@map("debt_schedule_items")
+}
+
+enum TermDepositStatus {
+  ACTIVE
+  MATURED
+  SETTLED
+  EARLY_WITHDRAWN
+}
+
+enum TermDepositRolloverMethod {
+  ROLLOVER_ALL
+  ROLLOVER_PRINCIPAL
+  SETTLE_TO_WALLET
+}
+
+model TermDeposit {
+  id                 String                    @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  userId             String                    @map("user_id") @db.Uuid
+  walletId           String                    @unique @map("wallet_id") @db.Uuid
+  bankName           String                    @map("bank_name") @db.VarChar(100)
+  accountNumber      String?                   @map("account_number") @db.VarChar(100)
+  principalAmount    Decimal                   @map("principal_amount") @db.Decimal(18, 2)
+  interestRate       Decimal                   @map("interest_rate") @db.Decimal(5, 2)
+  termMonths         Int                       @map("term_months")
+  startDate          DateTime                  @map("start_date") @db.Date
+  maturityDate       DateTime                  @map("maturity_date") @db.Date
+  rolloverMethod     TermDepositRolloverMethod @default(ROLLOVER_ALL) @map("rollover_method")
+  targetWalletId     String?                   @map("target_wallet_id") @db.Uuid
+  status             TermDepositStatus         @default(ACTIVE)
+  estimatedInterest  Decimal                   @map("estimated_interest") @db.Decimal(18, 2)
+  actualInterest     Decimal?                  @map("actual_interest") @db.Decimal(18, 2)
+  nonTermRate        Decimal                   @default(0.20) @map("non_term_rate") @db.Decimal(5, 2)
+  settledAt          DateTime?                 @map("settled_at") @db.Timestamptz(3)
+  rolloverCount      Int                       @default(0) @map("rollover_count")
+  lastRolloverAt     DateTime?                 @map("last_rollover_at") @db.Timestamptz(3)
+  isReminderSentT3    Boolean                   @default(false) @map("is_reminder_sent_t3")
+  isReminderSentT0    Boolean                   @default(false) @map("is_reminder_sent_t0")
+  notes              String?                   @db.Text
+  createdAt          DateTime                  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user               User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wallet             Wallet                    @relation("WalletTermDeposit", fields: [walletId], references: [id], onDelete: Cascade)
+  targetWallet       Wallet?                   @relation("TargetWalletTermDeposit", fields: [targetWalletId], references: [id], onDelete: SetNull)
+  rolloverLogs       TermDepositRolloverLog[]
+
+  @@index([userId, status])
+  @@index([userId, maturityDate])
+  @@index([status, maturityDate])
+  @@map("term_deposits")
+}
+
+model TermDepositRolloverLog {
+  id             String                    @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  termDepositId  String                    @map("term_deposit_id") @db.Uuid
+  cycleNumber    Int                       @map("cycle_number")
+  startDate      DateTime                  @map("start_date") @db.Date
+  endDate        DateTime                  @map("end_date") @db.Date
+  principal      Decimal                   @db.Decimal(18, 2)
+  interestEarned Decimal                   @map("interest_earned") @db.Decimal(18, 2)
+  actionTaken    TermDepositRolloverMethod @map("action_taken")
+  createdAt      DateTime                  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  termDeposit    TermDeposit               @relation(fields: [termDepositId], references: [id], onDelete: Cascade)
+
+  @@index([termDepositId])
+  @@map("term_deposit_rollover_logs")
 }
 

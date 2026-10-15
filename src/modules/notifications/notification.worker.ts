@@ -7,6 +7,7 @@ import { BudgetService } from '../budgets/budget.service';
 import { SubscriptionService } from '../subscriptions/subscription.service';
 import { auditLogArchiveService } from '../audit-logs/audit-log-archive.service';
 import { debtReminderService } from '../debts/services/debt-reminder.service';
+import { savingsReminderService } from '../savings/services/savings-reminder.service';
 
 import { lockService } from '../../common/services/lock.service';
 import { prisma } from '../../database/prisma.client';
@@ -93,6 +94,18 @@ export class NotificationWorker {
         await debtReminderService.processDueReminders(now);
       } catch (error) {
         console.error('Notification worker failed to process debt reminders', error);
+      }
+
+      try {
+        await savingsReminderService.processDueReminders(now);
+      } catch (error) {
+        console.error('Notification worker failed to process savings reminders', error);
+      }
+
+      try {
+        await savingsReminderService.processDueRollovers(now);
+      } catch (error) {
+        console.error('Notification worker failed to process savings rollovers', error);
       }
 
       if (

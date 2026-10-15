@@ -37,6 +37,7 @@ import statementRoute from '../modules/statements/statement.route';
 import backupRoute from '../modules/backup/backup.route';
 import handoverRoute from '../modules/handover/handover.route';
 import debtRoute from '../modules/debts/debt.route';
+import savingsRoute from '../modules/savings/savings.route';
 
 const router = Router();
 
@@ -79,5 +80,6 @@ router.use('/statements', statementRoute);
 router.use('/backup', backupRoute);
 router.use('/handover', handoverRoute);
 router.use('/debts', debtRoute);
+router.use('/savings', savingsRoute);
 
 export default router;

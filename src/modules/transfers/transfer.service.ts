@@ -40,6 +40,14 @@ export class TransferService {
         );
       }
 
+      if (sourceWallet.type === 'SAVINGS_ACCOUNT') {
+        throw new AppError(
+          'Sổ tiết kiệm đang bị khóa kỳ hạn. Không thể chuyển tiền trực tiếp từ sổ.',
+          409,
+          ERROR_CODE.WALLET_SAVINGS_LOCKED,
+        );
+      }
+
       if (sourceWallet.currency !== destinationWallet.currency) {
         throw new AppError(
           'Source and destination wallets must use the same currency',
