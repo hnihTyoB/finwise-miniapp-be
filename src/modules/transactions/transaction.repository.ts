@@ -190,7 +190,7 @@ export class TransactionRepository {
   ) {
     return transaction.wallet.findFirst({
       where: { id: walletId, userId },
-      select: { id: true, isArchived: true },
+      select: { id: true, isArchived: true, type: true },
     });
   }
 

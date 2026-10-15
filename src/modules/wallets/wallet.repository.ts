@@ -12,11 +12,15 @@ const walletSelect = {
   name: true,
   balance: true,
   currency: true,
+  type: true,
   icon: true,
   color: true,
   description: true,
   isDefault: true,
   isArchived: true,
+  termDeposit: {
+    select: { id: true },
+  },
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.WalletSelect;
@@ -24,9 +28,11 @@ const walletSelect = {
 type WalletRecord = Prisma.WalletGetPayload<{ select: typeof walletSelect }>;
 
 function toWalletResponse(wallet: WalletRecord): WalletResponseDto {
+  const { termDeposit, ...rest } = wallet;
   return {
-    ...wallet,
+    ...rest,
     balance: wallet.balance.toFixed(2),
+    termDepositId: termDeposit?.id || null,
   };
 }
 
@@ -60,6 +66,7 @@ export class WalletRepository {
     const where: Prisma.WalletWhereInput = {
       userId,
       ...(includeArchived ? {} : { isArchived: false }),
+      ...(query.type ? { type: query.type } : {}),
     };
     const skip = (page - 1) * limit;
 
@@ -125,6 +132,7 @@ export class WalletRepository {
           name: data.name,
           balance: data.balance,
           currency: data.currency,
+          type: data.type,
           icon: data.icon,
           color: data.color,
           description: data.description,

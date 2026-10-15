@@ -240,6 +240,14 @@ export class TransactionService {
       );
     }
 
+    if (wallet.type === 'SAVINGS_ACCOUNT' && type === 'EXPENSE') {
+      throw new AppError(
+        'Sổ tiết kiệm đang bị khóa kỳ hạn. Không thể chi tiêu trực tiếp từ sổ.',
+        409,
+        ERROR_CODE.WALLET_SAVINGS_LOCKED,
+      );
+    }
+
     if (!category) {
       throw new AppError('Category not found', 404, ERROR_CODE.NOT_FOUND);
     }

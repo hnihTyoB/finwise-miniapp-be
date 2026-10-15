@@ -33,6 +33,7 @@ export const findWalletsSchema = z.object({
     .transform((value) => value === 'true')
     .optional()
     .default('false'),
+  type: z.enum(['STANDARD', 'SAVINGS_ACCOUNT']).optional(),
   sortBy: z.enum(['name', 'balance', 'createdAt', 'updatedAt']).optional().default('createdAt'),
   order: z.enum(['asc', 'desc']).optional().default('desc'),
   page: z.coerce.number().int().positive().optional().default(1),
@@ -43,6 +44,7 @@ export const createWalletSchema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(100),
   balance: decimalSchema.optional(),
   currency: currencySchema.optional(),
+  type: z.enum(['STANDARD', 'SAVINGS_ACCOUNT']).optional(),
   icon: nullableIconSchema.optional(),
   color: nullableColorSchema.optional(),
   description: nullableDescriptionSchema.optional(),

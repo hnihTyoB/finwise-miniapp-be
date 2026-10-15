@@ -21,7 +21,7 @@ export class ForecastRepository {
       where: {
         userId,
         isArchived: false,
-        ...(walletId ? { id: walletId } : {}),
+        ...(walletId ? { id: walletId } : { type: 'STANDARD' }),
         ...(currency ? { currency } : {}),
       },
       select: {

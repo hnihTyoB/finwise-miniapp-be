@@ -179,6 +179,7 @@ export class TransferRepository {
         balance: true,
         currency: true,
         isArchived: true,
+        type: true,
       },
     });
   }

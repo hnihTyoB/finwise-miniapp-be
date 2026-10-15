@@ -59,6 +59,10 @@ export class WalletService {
       throw new AppError('Archived wallet cannot be set as default', 409, ERROR_CODE.WALLET_ARCHIVED);
     }
 
+    if (wallet.type === 'SAVINGS_ACCOUNT') {
+      throw new AppError('Sổ tiết kiệm không thể đặt làm ví mặc định', 409, ERROR_CODE.WALLET_SAVINGS_LOCKED);
+    }
+
     if (wallet.isDefault) {
       return wallet;
     }
@@ -78,6 +82,10 @@ export class WalletService {
 
     if (wallet.isArchived) {
       return wallet;
+    }
+
+    if (wallet.type === 'SAVINGS_ACCOUNT') {
+      throw new AppError('Không thể lưu trữ trực tiếp ví sổ tiết kiệm. Vui lòng tất toán sổ tiết kiệm.', 409, ERROR_CODE.WALLET_SAVINGS_LOCKED);
     }
 
     if (wallet.isDefault) {
