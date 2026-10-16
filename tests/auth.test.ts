@@ -244,6 +244,80 @@ describe('Auth Integration Tests', () => {
     expect(res.body.code).toBe('VALIDATION_ERROR');
   });
 
+  it('should switch account successfully with valid refreshToken and rotate token', async () => {
+    const dbUser = await prisma.user.findUnique({
+      where: { email: testUser.email },
+      include: { refreshTokens: true },
+    });
+    const oldRefreshToken = dbUser?.refreshTokens[0]?.token || '';
+    expect(oldRefreshToken).not.toBe('');
+
+    const res = await request(app)
+      .post('/api/v1/auth/switch')
+      .send({ refreshToken: oldRefreshToken });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toBeDefined();
+    expect(res.body.data.user.email).toBe(testUser.email);
+    expect(typeof res.body.data.accessToken).toBe('string');
+    expect(typeof res.body.data.refreshToken).toBe('string');
+    expect(res.body.data.refreshToken).not.toBe(oldRefreshToken);
+
+    // Verify old refresh token was rotated out from database
+    const oldTokenInDb = await prisma.refreshToken.findUnique({
+      where: { token: oldRefreshToken },
+    });
+    expect(oldTokenInDb).toBeNull();
+
+    // Verify new refresh token exists in database
+    const newTokenInDb = await prisma.refreshToken.findUnique({
+      where: { token: res.body.data.refreshToken },
+    });
+    expect(newTokenInDb).not.toBeNull();
+
+    // Verify zaloLinked boolean resolution
+    expect(typeof res.body.data.user.zaloLinked).toBe('boolean');
+
+    // Verify audit log entry was created via repository
+    const auditLogEntry = await prisma.auditLog.findFirst({
+      where: {
+        action: 'AUTH_ACCOUNT_SWITCH',
+        targetId: dbUser?.id,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(auditLogEntry).not.toBeNull();
+    expect(auditLogEntry?.actorId).toBe(dbUser?.id);
+
+    // Update tokens for subsequent tests
+    accessTokenHeader = res.body.data.accessToken;
+    const setCookies = res.headers['set-cookie'];
+    if (setCookies) {
+      accessTokenCookie = Array.isArray(setCookies) ? setCookies.join('; ') : setCookies;
+    }
+  });
+
+  it('should return 422 for switch account with missing or empty refreshToken', async () => {
+    const res = await request(app)
+      .post('/api/v1/auth/switch')
+      .send({ refreshToken: '' });
+
+    expect(res.status).toBe(422);
+    expect(res.body.success).toBe(false);
+    expect(res.body.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('should return 401 for switch account with invalid refreshToken', async () => {
+    const res = await request(app)
+      .post('/api/v1/auth/switch')
+      .send({ refreshToken: 'invalid.jwt.token' });
+
+    expect(res.status).toBe(401);
+    expect(res.body.success).toBe(false);
+    expect(res.body.code).toBe('TOKEN_INVALID');
+  });
+
   it('should logout successfully and clear cookies', async () => {
     // Trích xuất refresh token từ DB để gửi kèm body nếu logout yêu cầu (hoặc qua cookie)
     const dbUser = await prisma.user.findUnique({

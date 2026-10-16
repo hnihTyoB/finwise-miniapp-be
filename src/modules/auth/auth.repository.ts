@@ -1,4 +1,6 @@
 import { prisma } from '../../database/prisma.client';
+import { auditLogRepository } from '../audit-logs/audit-log.repository';
+import { CreateAuditLogDto } from '../audit-logs/audit-log.dto';
 
 export class AuthRepository {
   findByEmail(email: string) {
@@ -53,6 +55,10 @@ export class AuthRepository {
       await tx.refreshToken.deleteMany({ where: { token: oldToken } });
       return tx.refreshToken.create({ data: newRecord });
     });
+  }
+
+  async recordAuditLog(data: CreateAuditLogDto) {
+    return auditLogRepository.createAuditLog(data);
   }
 
   async findBySocial(provider: string, providerUserId: string) {

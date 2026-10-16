@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthService } from './auth.service';
-import { LoginDto, ZaloLoginDto, ZaloLinkDto, RegisterDto, UpdateProfileDto, UpdateAvatarDto, UpdatePasswordDto, ForgotPasswordDto, ResetPasswordDto, ResendVerificationDto, SessionQueryDto } from './auth.dto';
+import { LoginDto, ZaloLoginDto, ZaloLinkDto, RegisterDto, UpdateProfileDto, UpdateAvatarDto, UpdatePasswordDto, ForgotPasswordDto, ResetPasswordDto, ResendVerificationDto, SessionQueryDto, SwitchAccountDto } from './auth.dto';
 import { AppError } from '../../common/errors/app-error';
 import { ERROR_CODE } from '../../common/errors/error-code';
 
@@ -56,7 +56,7 @@ export class AuthController {
 
   refresh = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const refreshToken = req.cookies?.refreshToken || req.body.refreshToken;
+      const refreshToken = req.body?.refreshToken || req.cookies?.refreshToken;
       if (!refreshToken) {
         throw new AppError('Refresh token is required', 400, ERROR_CODE.TOKEN_INVALID);
       }
@@ -91,9 +91,53 @@ export class AuthController {
     }
   };
 
+  switchAccount = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { refreshToken } = req.body;
+      const userAgent = req.headers['user-agent'];
+      const ipAddress = req.ip;
+
+      const authHeader = req.headers.authorization;
+      const sourceAccessToken = authHeader?.startsWith('Bearer ')
+        ? authHeader.split(' ')[1]
+        : req.cookies?.accessToken;
+
+      const result = await this.service.switchAccount(refreshToken, {
+        userAgent,
+        ipAddress,
+        sourceAccessToken,
+      });
+
+      res.cookie('accessToken', result.accessToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 30 * 60 * 1000, // 30 minutes
+      });
+
+      res.cookie('refreshToken', result.refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
+
+      res.json({
+        success: true,
+        data: {
+          user: result.user,
+          accessToken: result.accessToken,
+          refreshToken: result.refreshToken,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   logout = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const refreshToken = req.cookies?.refreshToken || req.body.refreshToken;
+      const refreshToken = req.body?.refreshToken || req.cookies?.refreshToken;
       if (refreshToken) {
         await this.service.logout(refreshToken);
       }

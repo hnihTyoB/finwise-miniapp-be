@@ -3,7 +3,7 @@ import { AuthController } from './auth.controller';
 import { authMiddleware } from '../../middlewares/auth.middleware';
 import { authRateLimitMiddleware } from '../../middlewares/rate-limit.middleware';
 import { validate } from '../../middlewares/validate.middleware';
-import { loginSchema, zaloLoginSchema, zaloLinkSchema, refreshSchema, logoutSchema, registerSchema, verifyEmailSchema, updateProfileSchema, updateAvatarSchema, updatePasswordSchema, forgotPasswordSchema, resetPasswordSchema, resendVerificationSchema, sessionParamsSchema, sessionQuerySchema, revokeOtherSessionsSchema } from './auth.validation';
+import { loginSchema, zaloLoginSchema, zaloLinkSchema, refreshSchema, logoutSchema, registerSchema, verifyEmailSchema, updateProfileSchema, updateAvatarSchema, updatePasswordSchema, forgotPasswordSchema, resetPasswordSchema, resendVerificationSchema, sessionParamsSchema, sessionQuerySchema, revokeOtherSessionsSchema, switchAccountSchema } from './auth.validation';
 
 const router = Router();
 const controller = new AuthController();
@@ -14,6 +14,7 @@ router.post('/login', authRateLimitMiddleware, validate(loginSchema), controller
 router.post('/zalo-login', authRateLimitMiddleware, validate(zaloLoginSchema), controller.loginWithZalo);
 router.get('/me', authMiddleware, controller.me);
 router.post('/refresh', validate(refreshSchema), controller.refresh);
+router.post('/switch', authRateLimitMiddleware, validate(switchAccountSchema), controller.switchAccount);
 router.post('/logout', validate(logoutSchema), controller.logout);
 router.put('/profile', authMiddleware, validate(updateProfileSchema), controller.updateProfile);
 router.put('/avatar', authMiddleware, validate(updateAvatarSchema), controller.updateAvatar);
