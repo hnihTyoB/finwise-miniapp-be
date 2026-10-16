@@ -240,7 +240,22 @@ export class SavingsRepository {
     });
   }
 
-  async update(id: string, data: Prisma.TermDepositUpdateInput, client: RepositoryTransaction | typeof prisma = prisma) {
+  async update(
+    id: string,
+    data: Prisma.TermDepositUpdateInput,
+    client: RepositoryTransaction | typeof prisma = prisma,
+    userId?: string,
+  ) {
+    if (userId) {
+      const existing = await client.termDeposit.findFirst({
+        where: { id, userId },
+        select: { id: true },
+      });
+      if (!existing) {
+        throw new Error('Sổ tiết kiệm không tồn tại hoặc không có quyền truy cập');
+      }
+    }
+
     return client.termDeposit.update({
       where: { id },
       data,

@@ -316,7 +316,7 @@ export class SavingsService {
       };
     }
 
-    await this.repository.update(id, updateData);
+    await this.repository.update(id, updateData, undefined, userId);
     await this.invalidateCache(userId);
 
     return this.findById(userId, id);

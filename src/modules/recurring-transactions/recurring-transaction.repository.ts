@@ -13,6 +13,8 @@ import {
   RecurringTransactionHistoryQueryDto,
   RecurringTransactionQueryDto,
 } from './recurring-transaction.dto';
+import { AppError } from '../../common/errors/app-error';
+import { ERROR_CODE } from '../../common/errors/error-code';
 
 const scheduleSelect = {
   id: true,
@@ -202,7 +204,22 @@ export class RecurringTransactionRepository {
     id: string,
     data: Prisma.RecurringTransactionScheduleUncheckedUpdateInput,
     transaction: RecurringTransactionDbClient,
+    userId?: string,
   ) {
+    if (userId) {
+      const res = await transaction.recurringTransactionSchedule.updateMany({
+        where: { id, userId },
+        data,
+      });
+      if (res.count === 0) {
+        throw new AppError('Recurring transaction not found or access denied', 404, ERROR_CODE.NOT_FOUND);
+      }
+      const record = await transaction.recurringTransactionSchedule.findUniqueOrThrow({
+        where: { id },
+        select: scheduleSelect,
+      });
+      return toScheduleResponse(record);
+    }
     const record = await transaction.recurringTransactionSchedule.update({
       where: { id },
       data,
@@ -211,7 +228,17 @@ export class RecurringTransactionRepository {
     return toScheduleResponse(record);
   }
 
-  archive(id: string, transaction: RecurringTransactionDbClient) {
+  async archive(id: string, transaction: RecurringTransactionDbClient, userId?: string) {
+    if (userId) {
+      const res = await transaction.recurringTransactionSchedule.updateMany({
+        where: { id, userId },
+        data: { isActive: false, nextRunAt: null, deletedAt: new Date() },
+      });
+      if (res.count === 0) {
+        throw new AppError('Recurring transaction not found or access denied', 404, ERROR_CODE.NOT_FOUND);
+      }
+      return { id };
+    }
     return transaction.recurringTransactionSchedule.update({
       where: { id },
       data: { isActive: false, nextRunAt: null, deletedAt: new Date() },

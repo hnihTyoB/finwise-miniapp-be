@@ -41,12 +41,12 @@ export class ReminderService {
   async update(userId: string, id: string, data: UpdateReminderDto) {
     const current = await this.findRecord(userId, id);
     const persistence = this.resolveUpdate(current, data);
-    return this.toResponse(await this.repository.update(id, persistence));
+    return this.toResponse(await this.repository.update(id, persistence, userId));
   }
 
   async remove(userId: string, id: string) {
     await this.findRecord(userId, id);
-    return this.repository.remove(id);
+    return this.repository.remove(id, userId);
   }
 
   async processDue(now: Date) {
