@@ -38,6 +38,7 @@ export const findTransactionsSchema = z
     walletId: z.string().uuid('Invalid wallet id').optional(),
     categoryId: z.string().uuid('Invalid category id').optional(),
     type: transactionTypeSchema.optional(),
+    spendingScope: z.enum(['ALL', 'PERSONAL', 'SHARED']).optional().default('ALL'),
     dateFrom: dateSchema.optional(),
     dateTo: dateSchema.optional(),
     minAmount: amountSchema.optional(),

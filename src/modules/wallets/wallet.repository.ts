@@ -9,6 +9,7 @@ import {
 
 const walletSelect = {
   id: true,
+  userId: true,
   name: true,
   balance: true,
   currency: true,
@@ -18,8 +19,24 @@ const walletSelect = {
   description: true,
   isDefault: true,
   isArchived: true,
+  isShared: true,
   termDeposit: {
     select: { id: true },
+  },
+  members: {
+    where: { status: 'ACTIVE' },
+    select: {
+      id: true,
+      userId: true,
+      role: true,
+      nickname: true,
+      user: {
+        select: {
+          fullName: true,
+          avatarUrl: true,
+        },
+      },
+    },
   },
   createdAt: true,
   updatedAt: true,
@@ -27,12 +44,27 @@ const walletSelect = {
 
 type WalletRecord = Prisma.WalletGetPayload<{ select: typeof walletSelect }>;
 
-function toWalletResponse(wallet: WalletRecord): WalletResponseDto {
-  const { termDeposit, ...rest } = wallet;
+function toWalletResponse(wallet: WalletRecord, currentUserId?: string): WalletResponseDto {
+  const { termDeposit, members, userId: ownerId, ...rest } = wallet;
+  const isOwner = currentUserId ? ownerId === currentUserId : false;
+  const myMembership = currentUserId ? members?.find((m) => m.userId === currentUserId) : undefined;
+  const myRole = isOwner ? 'OWNER' : (myMembership?.role || 'VIEWER');
+
+  const membersSummary = (members || []).map((m) => ({
+    id: m.userId,
+    fullName: m.nickname || m.user.fullName,
+    avatarUrl: m.user.avatarUrl,
+    role: m.role,
+  }));
+
   return {
     ...rest,
     balance: wallet.balance.toFixed(2),
     termDepositId: termDeposit?.id || null,
+    isShared: wallet.isShared,
+    myRole,
+    membersCount: (members?.length || 0) + 1,
+    membersSummary,
   };
 }
 
@@ -62,9 +94,31 @@ async function runSerializableTransaction<T>(
 
 export class WalletRepository {
   async findAll(userId: string, query: WalletQueryDto) {
-    const { includeArchived, sortBy, order, page, limit } = query;
+    const { includeArchived, sortBy, order, page, limit, scope } = query;
+
+    let userCondition: Prisma.WalletWhereInput = {
+      OR: [
+        { userId },
+        { members: { some: { userId, status: 'ACTIVE' } } },
+      ],
+    };
+
+    if (scope === 'PERSONAL') {
+      userCondition = {
+        userId,
+        isShared: false,
+      };
+    } else if (scope === 'SHARED') {
+      userCondition = {
+        OR: [
+          { userId, isShared: true },
+          { members: { some: { userId, status: 'ACTIVE' } } },
+        ],
+      };
+    }
+
     const where: Prisma.WalletWhereInput = {
-      userId,
+      ...userCondition,
       ...(includeArchived ? {} : { isArchived: false }),
       ...(query.type ? { type: query.type } : {}),
     };
@@ -82,7 +136,7 @@ export class WalletRepository {
     ]);
 
     return {
-      data: wallets.map(toWalletResponse),
+      data: wallets.map((w) => toWalletResponse(w, userId)),
       meta: {
         total,
         page,
@@ -94,11 +148,17 @@ export class WalletRepository {
 
   async findById(userId: string, id: string) {
     const wallet = await prisma.wallet.findFirst({
-      where: { id, userId },
+      where: {
+        id,
+        OR: [
+          { userId },
+          { members: { some: { userId, status: 'ACTIVE' } } },
+        ],
+      },
       select: walletSelect,
     });
 
-    return wallet ? toWalletResponse(wallet) : null;
+    return wallet ? toWalletResponse(wallet, userId) : null;
   }
 
   findByName(userId: string, name: string, excludeId?: string) {

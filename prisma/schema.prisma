@@ -49,6 +49,32 @@ enum NotificationType {
   SAVINGS_DEPOSIT_DUE_SOON
   SAVINGS_DEPOSIT_MATURED
   SYSTEM
+  SHARED_WALLET_INVITE_RECEIVED
+  SHARED_WALLET_INVITE_ACCEPTED
+  SHARED_WALLET_MEMBER_JOINED
+  SHARED_WALLET_TRANSACTION_ALERT
+  SHARED_WALLET_MEMBER_REMOVED
+  SHARED_WALLET_LIMIT_EXCEEDED
+}
+
+enum WalletMemberRole {
+  OWNER
+  MEMBER
+  VIEWER
+}
+
+enum WalletMemberStatus {
+  ACTIVE
+  SUSPENDED
+  LEFT
+}
+
+enum WalletInvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+  REVOKED
 }
 
 enum NotificationPriority {
@@ -183,6 +209,9 @@ model User {
   debtContracts                 DebtContract[]
   debtScheduleItems             DebtScheduleItem[]
   termDeposits                  TermDeposit[]
+  walletMemberships             WalletMember[]
+  walletInvitationsSent         WalletInvitation[]             @relation("WalletInvitationsSent")
+  walletInvitationsAccepted     WalletInvitation[]             @relation("WalletInvitationsAccepted")
 
   @@index([roleId])
   @@index([deletedAt, isActive])
@@ -263,10 +292,14 @@ model Wallet {
   description String?
   isDefault   Boolean    @default(false) @map("is_default")
   isArchived  Boolean    @default(false) @map("is_archived")
+  isShared    Boolean    @default(false) @map("is_shared")
   createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user                          User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  members                       WalletMember[]
+  invitations                   WalletInvitation[]
+  budgets                       Budget[]
   transactions                  Transaction[]
   outgoingTransfers             Transfer[]                     @relation("TransferSourceWallet")
   incomingTransfers             Transfer[]                     @relation("TransferDestinationWallet")
@@ -278,7 +311,51 @@ model Wallet {
 
   @@unique([userId, name])
   @@index([userId, isArchived])
+  @@index([isShared, isArchived])
   @@map("wallets")
+}
+
+model WalletMember {
+  id                   String             @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  walletId             String             @map("wallet_id") @db.Uuid
+  userId               String             @map("user_id") @db.Uuid
+  role                 WalletMemberRole   @default(MEMBER)
+  nickname             String?            @db.VarChar(50)
+  monthlySpendingLimit Decimal?           @map("monthly_spending_limit") @db.Decimal(18, 2)
+  status               WalletMemberStatus @default(ACTIVE)
+  joinedAt             DateTime           @default(now()) @map("joined_at") @db.Timestamptz(3)
+  createdAt            DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([walletId, userId])
+  @@index([userId, status])
+  @@index([walletId, status])
+  @@map("wallet_members")
+}
+
+model WalletInvitation {
+  id         String                 @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  walletId   String                 @map("wallet_id") @db.Uuid
+  inviterId  String                 @map("inviter_id") @db.Uuid
+  role       WalletMemberRole       @default(MEMBER)
+  inviteCode String                 @unique @map("invite_code") @db.VarChar(32)
+  status     WalletInvitationStatus @default(PENDING)
+  expiresAt  DateTime               @map("expires_at") @db.Timestamptz(3)
+  acceptedBy String?                @map("accepted_by") @db.Uuid
+  acceptedAt DateTime?              @map("accepted_at") @db.Timestamptz(3)
+  createdAt  DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  wallet   Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  inviter  User   @relation("WalletInvitationsSent", fields: [inviterId], references: [id], onDelete: Cascade)
+  acceptor User?  @relation("WalletInvitationsAccepted", fields: [acceptedBy], references: [id], onDelete: SetNull)
+
+  @@index([inviteCode])
+  @@index([walletId, status])
+  @@map("wallet_invitations")
 }
 
 model Category {
@@ -392,15 +469,18 @@ model Budget {
   autoRenewUntil    DateTime?          @map("auto_renew_until") @db.Date
   renewedAt         DateTime?          @map("renewed_at") @db.Timestamptz(3)
   parentBudgetId    String?            @map("parent_budget_id") @db.Uuid
+  walletId          String?            @map("wallet_id") @db.Uuid
   createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   category     Category? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  wallet       Wallet?   @relation(fields: [walletId], references: [id], onDelete: Cascade)
   parentBudget Budget?   @relation("BudgetHistory", fields: [parentBudgetId], references: [id], onDelete: SetNull)
   childBudgets Budget[]  @relation("BudgetHistory")
 
   @@index([categoryId])
+  @@index([walletId])
   @@index([userId, isArchived])
   @@index([userId, startDate, endDate])
   @@index([userId, currency, startDate, endDate])

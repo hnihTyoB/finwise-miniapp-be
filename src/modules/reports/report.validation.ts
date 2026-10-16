@@ -24,6 +24,10 @@ export const reportQuerySchema = z
       .regex(/^[A-Za-z]{3}$/, 'Currency must contain only letters')
       .transform((value) => value.toUpperCase())
       .optional(),
+    spendingScope: z
+      .enum(['ALL', 'PERSONAL', 'SHARED'])
+      .optional()
+      .default('ALL'),
     granularity: z
       .enum(['AUTO', 'HOUR', 'DAY', 'WEEK', 'MONTH', 'YEAR'])
       .optional()

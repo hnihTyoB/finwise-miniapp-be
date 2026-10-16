@@ -5,6 +5,7 @@ import { NotificationService } from '../notifications/notification.service';
 import { ReceiptFileService, StoredReceipt } from './receipt-file.service';
 import { cacheService } from '../../common/services/cache.service';
 import { webhookService } from '../webhooks/webhook.service';
+import { SharedWalletService } from '../wallets/shared-wallet.service';
 import {
   CreateTransactionDto,
   TransactionQueryDto,
@@ -19,6 +20,7 @@ export class TransactionService {
   private readonly repository = new TransactionRepository();
   private readonly receiptFiles = new ReceiptFileService();
   private readonly notificationService = new NotificationService();
+  private readonly sharedWalletService = new SharedWalletService();
 
   findAll(userId: string, query: TransactionQueryDto) {
     return this.repository.findAll(userId, query);
@@ -35,6 +37,13 @@ export class TransactionService {
   }
 
   async create(userId: string, data: CreateTransactionDto) {
+    await this.sharedWalletService.assertCanCreateTransaction(
+      userId,
+      data.walletId,
+      new Prisma.Decimal(data.amount),
+      data.type,
+    );
+
     const created = await this.repository.runSerializable(async (transaction) => {
       await this.ensureValidRelations(
         userId,
@@ -58,6 +67,9 @@ export class TransactionService {
 
     await this.notificationService.detectUnusualTransaction(userId, created);
     await this.invalidateReportCache(userId);
+
+    // Phát thông báo cho các thành viên trong ví dùng chung (nếu có)
+    this.sharedWalletService.broadcastTransactionCreated(userId, data.walletId, created);
 
     // Tự động phát tán event qua Webhook callback của User
     webhookService
@@ -98,6 +110,23 @@ export class TransactionService {
       if (!currentWallet) {
         throw new AppError('Wallet not found', 404, ERROR_CODE.NOT_FOUND);
       }
+
+      // Check permissions: only creator or wallet owner can edit
+      const isCreator = current.userId === userId;
+      const isOwner = currentWallet.userId === userId;
+      if (!isCreator && !isOwner) {
+        throw new AppError('Bạn chỉ có quyền chỉnh sửa giao dịch do chính mình tạo ra', 403, ERROR_CODE.FORBIDDEN);
+      }
+
+      await this.sharedWalletService.assertCanUpdateTransaction(
+        userId,
+        current.walletId,
+        nextWalletId,
+        new Prisma.Decimal(current.amount),
+        current.type,
+        nextAmount,
+        nextType,
+      );
 
       await this.ensureValidRelations(
         userId,
@@ -146,6 +175,13 @@ export class TransactionService {
       );
       if (!wallet) {
         throw new AppError('Wallet not found', 404, ERROR_CODE.NOT_FOUND);
+      }
+
+      // Check permissions: only creator or wallet owner can delete
+      const isCreator = current.userId === userId;
+      const isOwner = wallet.userId === userId;
+      if (!isCreator && !isOwner) {
+        throw new AppError('Bạn chỉ có quyền xóa giao dịch do chính mình tạo ra', 403, ERROR_CODE.FORBIDDEN);
       }
 
       await this.repository.adjustWalletBalance(

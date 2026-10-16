@@ -36,16 +36,19 @@ export class WalletService {
   }
 
   async update(userId: string, id: string, data: UpdateWalletDto) {
-    await this.findById(userId, id);
+    const wallet = await this.findById(userId, id);
+    if (wallet.myRole !== 'OWNER') {
+      throw new AppError('Chỉ chủ ví mới có quyền chỉnh sửa thông tin ví', 403, ERROR_CODE.FORBIDDEN);
+    }
 
     if (data.name !== undefined) {
       await this.ensureUniqueName(userId, data.name, id);
     }
 
     try {
-      const wallet = await this.repository.update(id, data);
+      const updated = await this.repository.update(id, data);
       await this.invalidateReportCache(userId);
-      return wallet;
+      return updated;
     } catch (error) {
       this.handleUniqueConstraint(error);
       throw error;
@@ -54,6 +57,9 @@ export class WalletService {
 
   async setDefault(userId: string, id: string) {
     const wallet = await this.findById(userId, id);
+    if (wallet.myRole !== 'OWNER') {
+      throw new AppError('Chỉ có thể đặt ví cá nhân làm ví mặc định', 403, ERROR_CODE.FORBIDDEN);
+    }
 
     if (wallet.isArchived) {
       throw new AppError('Archived wallet cannot be set as default', 409, ERROR_CODE.WALLET_ARCHIVED);
@@ -79,6 +85,9 @@ export class WalletService {
 
   async archive(userId: string, id: string) {
     const wallet = await this.findById(userId, id);
+    if (wallet.myRole !== 'OWNER') {
+      throw new AppError('Chỉ chủ ví mới có quyền lưu trữ ví', 403, ERROR_CODE.FORBIDDEN);
+    }
 
     if (wallet.isArchived) {
       return wallet;

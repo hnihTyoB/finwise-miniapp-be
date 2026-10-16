@@ -22,6 +22,7 @@ const budgetSelect = {
   type: true,
   period: true,
   categoryId: true,
+  walletId: true,
   startDate: true,
   endDate: true,
   alertThreshold: true,
@@ -45,6 +46,13 @@ const budgetSelect = {
       color: true,
     },
   },
+  wallet: {
+    select: {
+      id: true,
+      name: true,
+      currency: true,
+    },
+  },
 } satisfies Prisma.BudgetSelect;
 
 export type BudgetRecord = Prisma.BudgetGetPayload<{
@@ -65,6 +73,7 @@ export class BudgetRepository {
       period,
       currency,
       categoryId,
+      walletId,
       activeAt,
       includeArchived,
       isRecurring,
@@ -79,6 +88,7 @@ export class BudgetRepository {
       ...(period ? { period } : {}),
       ...(currency ? { currency } : {}),
       ...(categoryId ? { categoryId } : {}),
+      ...(walletId ? { walletId } : {}),
       ...(isRecurring !== undefined ? { isRecurring } : {}),
       ...(activeAt
         ? {
@@ -157,18 +167,22 @@ export class BudgetRepository {
     startDate: Date,
     endDate: Date,
     currency: string,
+    walletId?: string | null,
   ): Promise<BudgetSpendingSummary> {
-    const result = await prisma.transaction.aggregate({
-      where: {
-        userId,
-        type: TransactionType.EXPENSE,
-        ...(categoryId ? { categoryId } : {}),
-        date: {
-          gte: startDate,
-          lte: endDate,
-        },
-        wallet: { currency },
+    const whereCondition: Prisma.TransactionWhereInput = {
+      type: TransactionType.EXPENSE,
+      ...(categoryId ? { categoryId } : {}),
+      date: {
+        gte: startDate,
+        lte: endDate,
       },
+      ...(walletId
+        ? { walletId }
+        : { userId, wallet: { currency } }),
+    };
+
+    const result = await prisma.transaction.aggregate({
+      where: whereCondition,
       _sum: { amount: true },
       _count: { _all: true },
       _max: { date: true },
@@ -203,9 +217,12 @@ export class BudgetRepository {
         COUNT(t.id)::int AS txn_count,
         MAX(t.date) AS last_date
       FROM budgets b
-      LEFT JOIN wallets w ON w.user_id = b.user_id AND w.currency = b.currency
+      LEFT JOIN wallets w ON (
+        (b.wallet_id IS NOT NULL AND w.id = b.wallet_id)
+        OR (b.wallet_id IS NULL AND w.user_id = b.user_id AND w.currency = b.currency)
+      )
       LEFT JOIN transactions t ON t.wallet_id = w.id
-        AND t.user_id = b.user_id
+        AND (b.wallet_id IS NOT NULL OR t.user_id = b.user_id)
         AND t.type = 'EXPENSE'
         AND t.date >= b.start_date
         AND t.date <= b.end_date
@@ -245,6 +262,7 @@ export class BudgetRepository {
         type: data.type,
         period: data.period,
         categoryId: data.categoryId,
+        walletId: data.walletId,
         alertThreshold: data.alertThreshold,
         startDate: businessDateToPrismaDate(data.startDate),
         endDate: businessDateToPrismaDate(data.endDate),
@@ -275,6 +293,7 @@ export class BudgetRepository {
         type: data.type,
         period: data.period,
         categoryId: data.categoryId,
+        ...(data.walletId !== undefined ? { walletId: data.walletId } : {}),
         alertThreshold: data.alertThreshold,
         startDate: businessDateToPrismaDate(data.startDate),
         endDate: businessDateToPrismaDate(data.endDate),

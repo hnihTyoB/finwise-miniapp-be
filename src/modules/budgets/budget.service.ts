@@ -406,6 +406,7 @@ export class BudgetService {
       type: data.type,
       period: data.period,
       categoryId,
+      walletId: data.walletId ?? null,
       startDate: data.startDate,
       endDate,
       alertThreshold: data.alertThreshold,
@@ -483,6 +484,7 @@ export class BudgetService {
       type,
       period,
       categoryId,
+      walletId: data.walletId !== undefined ? data.walletId : current.walletId,
       startDate,
       endDate,
       alertThreshold: data.alertThreshold ?? current.alertThreshold.toFixed(2),
@@ -597,6 +599,7 @@ export class BudgetService {
       budget.startDate,
       budget.endDate,
       budget.currency,
+      budget.walletId,
     );
 
     return this.formatBudgetResponse(budget, spending);

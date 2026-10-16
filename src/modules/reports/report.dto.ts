@@ -11,6 +11,7 @@ export interface ReportQueryDto {
   dateTo?: Date;
   walletId?: string;
   currency?: string;
+  spendingScope?: 'ALL' | 'PERSONAL' | 'SHARED';
   granularity: ReportGranularity;
 }
 

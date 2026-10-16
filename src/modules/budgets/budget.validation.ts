@@ -62,6 +62,7 @@ export const findBudgetsSchema = z.object({
   period: budgetPeriodSchema.optional(),
   currency: currencySchema.optional(),
   categoryId: z.string().uuid('Invalid category id').optional(),
+  walletId: z.string().uuid('Invalid wallet id').optional(),
   activeAt: dateSchema.optional(),
   includeArchived: z
     .enum(['true', 'false'])
@@ -89,6 +90,7 @@ export const createBudgetSchema = z
     type: budgetTypeSchema,
     period: budgetPeriodSchema,
     categoryId: z.string().uuid('Invalid category id').nullable().optional(),
+    walletId: z.string().uuid('Invalid wallet id').nullable().optional(),
     startDate: dateSchema,
     endDate: dateSchema.optional(),
     alertThreshold: alertThresholdSchema.optional().default('80'),
@@ -163,6 +165,7 @@ export const updateBudgetSchema = z
     type: budgetTypeSchema.optional(),
     period: budgetPeriodSchema.optional(),
     categoryId: z.string().uuid('Invalid category id').nullable().optional(),
+    walletId: z.string().uuid('Invalid wallet id').nullable().optional(),
     startDate: dateSchema.optional(),
     endDate: dateSchema.optional(),
     alertThreshold: alertThresholdSchema.optional(),

@@ -77,15 +77,42 @@ export interface ContributionSummary {
 export class ReportRepository {
   findWalletById(userId: string, walletId: string) {
     return prisma.wallet.findFirst({
-      where: { id: walletId, userId },
+      where: {
+        id: walletId,
+        OR: [
+          { userId },
+          { members: { some: { userId, status: 'ACTIVE' } } },
+        ],
+      },
       select: reportWalletSelect,
     });
   }
 
-  findWallets(userId: string, walletId?: string, currency?: string) {
+  findWallets(userId: string, walletId?: string, currency?: string, spendingScope?: 'ALL' | 'PERSONAL' | 'SHARED') {
+    let scopeWhere: Prisma.WalletWhereInput = {
+      OR: [
+        { userId },
+        { members: { some: { userId, status: 'ACTIVE' } } },
+      ],
+    };
+
+    if (spendingScope === 'PERSONAL') {
+      scopeWhere = {
+        userId,
+        isShared: false,
+      };
+    } else if (spendingScope === 'SHARED') {
+      scopeWhere = {
+        OR: [
+          { userId, isShared: true },
+          { members: { some: { userId, status: 'ACTIVE' } } },
+        ],
+      };
+    }
+
     return prisma.wallet.findMany({
       where: {
-        userId,
+        ...scopeWhere,
         ...(walletId ? { id: walletId } : {}),
         ...(currency ? { currency } : {}),
       },
@@ -100,10 +127,34 @@ export class ReportRepository {
     to: Date,
     walletId?: string,
     currency?: string,
+    spendingScope?: 'ALL' | 'PERSONAL' | 'SHARED',
   ): Promise<ReportTransactionRecord[]> {
+    let scopeWhere: Prisma.TransactionWhereInput = {
+      OR: [
+        { userId },
+        { wallet: { members: { some: { userId, status: 'ACTIVE' } } } },
+      ],
+    };
+
+    if (spendingScope === 'PERSONAL') {
+      scopeWhere = {
+        userId,
+        wallet: { isShared: false },
+      };
+    } else if (spendingScope === 'SHARED') {
+      scopeWhere = {
+        wallet: {
+          OR: [
+            { userId, isShared: true },
+            { members: { some: { userId, status: 'ACTIVE' } } },
+          ],
+        },
+      };
+    }
+
     return prisma.transaction.findMany({
       where: {
-        userId,
+        ...scopeWhere,
         date: {
           gte: businessDateToPrismaDate(instantToBusinessDate(from)),
           lt: businessDateToPrismaDate(instantToBusinessDate(to)),
