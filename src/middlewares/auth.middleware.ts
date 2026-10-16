@@ -11,13 +11,17 @@ export async function authMiddleware(
   res: Response,
   next: NextFunction,
 ): Promise<void> {
-  let token = req.cookies?.accessToken;
+  let token: string | undefined;
 
-  if (!token) {
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      token = authHeader.split(' ')[1];
-    }
+  // 1. Prioritize explicit Bearer token in Authorization header
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  }
+
+  // 2. Fallback to HTTP-only cookie if no Authorization header
+  if (!token && req.cookies?.accessToken) {
+    token = req.cookies.accessToken;
   }
 
   // Allow query token ONLY for EventSource / SSE connection endpoints

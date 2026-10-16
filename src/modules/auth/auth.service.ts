@@ -186,6 +186,131 @@ export class AuthService {
     };
   }
 
+  async switchAccount(
+    token: string,
+    metadata?: { userAgent?: string; ipAddress?: string; sourceAccessToken?: string }
+  ): Promise<LoginResponseDto> {
+    let payload: any;
+    try {
+      payload = jwt.verify(token, jwtConfig.refreshSecret);
+    } catch (_error) {
+      throw new AppError('Invalid refresh token', 401, ERROR_CODE.TOKEN_INVALID);
+    }
+
+    const savedToken = await this.repository.findRefreshToken(token);
+    if (!savedToken) {
+      throw new AppError('Invalid or expired refresh token', 401, ERROR_CODE.TOKEN_INVALID);
+    }
+
+    if (savedToken.expiresAt < new Date()) {
+      await this.repository.deleteRefreshToken(token);
+      throw new AppError('Refresh token expired', 401, ERROR_CODE.TOKEN_EXPIRED);
+    }
+
+    const user = await this.repository.findById(payload.id);
+    if (!user || !user.isActive) {
+      throw new AppError('User not found or inactive', 401, ERROR_CODE.USER_INACTIVE);
+    }
+
+    // Defense-in-depth: Ensure token record matches user
+    if (savedToken.userId !== user.id) {
+      throw new AppError('Token does not match user', 401, ERROR_CODE.TOKEN_INVALID);
+    }
+
+    const newPayload = { id: user.id, email: user.email, role: user.role.name };
+
+    const newAccessToken = jwt.sign(newPayload, jwtConfig.accessSecret, {
+      expiresIn: jwtConfig.accessExpiresIn as any,
+    });
+
+    const newRefreshToken = jwt.sign(
+      { ...newPayload, jti: crypto.randomUUID() },
+      jwtConfig.refreshSecret,
+      { expiresIn: jwtConfig.refreshExpiresIn as any }
+    );
+
+    const decoded = jwt.decode(newRefreshToken) as { exp: number };
+    const expiresAt = new Date(decoded.exp * 1000);
+
+    // Atomic token rotation
+    await this.repository.rotateRefreshToken(token, {
+      userId: user.id,
+      token: newRefreshToken,
+      expiresAt,
+      userAgent: metadata?.userAgent,
+      ipAddress: metadata?.ipAddress,
+    });
+
+    await this.repository.cleanupExpiredSessions(user.id);
+    await this.repository.enforceSessionLimit(user.id, 10);
+
+    // Safely verify and resolve sourceUserId from sourceAccessToken
+    let sourceUserId: string | undefined;
+    if (metadata?.sourceAccessToken) {
+      try {
+        const verifiedSource = jwt.verify(metadata.sourceAccessToken, jwtConfig.accessSecret, {
+          ignoreExpiration: true,
+        }) as { id?: string };
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (verifiedSource?.id && uuidRegex.test(verifiedSource.id)) {
+          sourceUserId = verifiedSource.id;
+        }
+      } catch {
+        // Untrusted/invalid access token signature — ignore sourceUserId to prevent spoofing
+      }
+    }
+
+    // Record audit log for security monitoring
+    try {
+      await this.repository.recordAuditLog({
+        actorId: sourceUserId || user.id,
+        action: 'AUTH_ACCOUNT_SWITCH',
+        targetType: 'USER',
+        targetId: user.id,
+        ipAddress: metadata?.ipAddress,
+        userAgent: metadata?.userAgent,
+        previousState: sourceUserId ? { sourceUserId } : undefined,
+        newState: {
+          switchedToUserId: user.id,
+          switchedToEmail: user.email,
+          role: user.role.name,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    } catch (auditErr) {
+      console.error('Failed to create audit log for account switch:', auditErr);
+    }
+
+    const permissions = await rbacService.getUserPermissions(user.id);
+    const zaloSocial = await this.repository.findUserSocial(user.id, 'ZALO');
+
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        fullName: user.fullName,
+        avatarUrl: user.avatarUrl,
+        avatarPositionX: user.avatarPositionX,
+        avatarPositionY: user.avatarPositionY,
+        phoneNumber: user.phoneNumber,
+        roleId: user.roleId,
+        role: {
+          id: user.role.id,
+          name: user.role.name,
+          description: user.role.description,
+          isSystem: user.role.isSystem,
+        },
+        permissions,
+        isActive: user.isActive,
+        zaloLinked: Boolean(zaloSocial),
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      },
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
+    };
+  }
+
   async logout(token: string) {
     const result = await this.repository.deleteRefreshToken(token);
 

@@ -132,3 +132,8 @@ export interface SessionsResponseDto {
   };
 }
 
+export interface SwitchAccountDto {
+  refreshToken: string;
+}
+
+

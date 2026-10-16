@@ -149,3 +149,8 @@ export const sessionQuerySchema = z.object({
 export const revokeOtherSessionsSchema = z.object({
   refreshToken: z.string().optional(),
 });
+
+export const switchAccountSchema = z.object({
+  refreshToken: z.string().min(1, 'Refresh token is required'),
+});
+
