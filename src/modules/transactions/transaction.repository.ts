@@ -13,6 +13,7 @@ import {
 
 const transactionSelect = {
   id: true,
+  userId: true,
   walletId: true,
   categoryId: true,
   amount: true,
@@ -23,11 +24,19 @@ const transactionSelect = {
   date: true,
   createdAt: true,
   updatedAt: true,
+  user: {
+    select: {
+      id: true,
+      fullName: true,
+      avatarUrl: true,
+    },
+  },
   wallet: {
     select: {
       id: true,
       name: true,
       currency: true,
+      isShared: true,
     },
   },
   category: {
@@ -48,13 +57,25 @@ type TransactionRecord = Prisma.TransactionGetPayload<{
 export type RepositoryTransaction = Prisma.TransactionClient;
 
 function toTransactionResponse(transaction: TransactionRecord): TransactionResponseDto {
+  const { user, ...rest } = transaction;
   return {
-    ...transaction,
+    ...rest,
     date: prismaDateToBusinessDate(transaction.date),
     amount: transaction.amount.toFixed(2),
     receiptUrl: transaction.receiptUrl
       ? `/api/v1/transactions/${transaction.id}/receipt`
       : null,
+    creator: user ? {
+      id: user.id,
+      fullName: user.fullName,
+      avatarUrl: user.avatarUrl,
+    } : null,
+    createdBy: user ? {
+      id: user.id,
+      fullName: user.fullName,
+      avatarUrl: user.avatarUrl,
+    } : null,
+    isSharedWallet: Boolean(transaction.wallet?.isShared),
   };
 }
 
@@ -95,6 +116,7 @@ export class TransactionRepository {
       walletId,
       categoryId,
       type,
+      spendingScope,
       dateFrom,
       dateTo,
       minAmount,
@@ -104,8 +126,32 @@ export class TransactionRepository {
       page,
       limit,
     } = query;
+
+    let scopeCondition: Prisma.TransactionWhereInput = {
+      OR: [
+        { userId },
+        { wallet: { members: { some: { userId, status: 'ACTIVE' } } } },
+      ],
+    };
+
+    if (spendingScope === 'PERSONAL') {
+      scopeCondition = {
+        userId,
+        wallet: { isShared: false },
+      };
+    } else if (spendingScope === 'SHARED') {
+      scopeCondition = {
+        wallet: {
+          OR: [
+            { userId, isShared: true },
+            { members: { some: { userId, status: 'ACTIVE' } } },
+          ],
+        },
+      };
+    }
+
     const where: Prisma.TransactionWhereInput = {
-      userId,
+      ...scopeCondition,
       ...(walletId ? { walletId } : {}),
       ...(categoryId ? { categoryId } : {}),
       ...(type ? { type } : {}),
@@ -169,7 +215,14 @@ export class TransactionRepository {
     transaction?: RepositoryTransaction,
   ) {
     const record = await client(transaction).transaction.findFirst({
-      where: { id, userId },
+      where: {
+        id,
+        OR: [
+          { userId },
+          { wallet: { userId } },
+          { wallet: { members: { some: { userId, status: 'ACTIVE' } } } },
+        ],
+      },
       select: transactionSelect,
     });
 
@@ -178,7 +231,14 @@ export class TransactionRepository {
 
   findStoredReceipt(userId: string, id: string) {
     return prisma.transaction.findFirst({
-      where: { id, userId },
+      where: {
+        id,
+        OR: [
+          { userId },
+          { wallet: { userId } },
+          { wallet: { members: { some: { userId, status: 'ACTIVE' } } } },
+        ],
+      },
       select: { id: true, receiptUrl: true },
     });
   }
@@ -189,8 +249,14 @@ export class TransactionRepository {
     transaction: RepositoryTransaction,
   ) {
     return transaction.wallet.findFirst({
-      where: { id: walletId, userId },
-      select: { id: true, isArchived: true, type: true },
+      where: {
+        id: walletId,
+        OR: [
+          { userId },
+          { members: { some: { userId, status: 'ACTIVE' } } },
+        ],
+      },
+      select: { id: true, isArchived: true, type: true, userId: true },
     });
   }
 

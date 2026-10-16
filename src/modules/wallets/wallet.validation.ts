@@ -34,11 +34,16 @@ export const findWalletsSchema = z.object({
     .optional()
     .default('false'),
   type: z.enum(['STANDARD', 'SAVINGS_ACCOUNT']).optional(),
+  scope: z.enum(['ALL', 'PERSONAL', 'SHARED']).optional(),
+  spendingScope: z.enum(['ALL', 'PERSONAL', 'SHARED']).optional(),
   sortBy: z.enum(['name', 'balance', 'createdAt', 'updatedAt']).optional().default('createdAt'),
   order: z.enum(['asc', 'desc']).optional().default('desc'),
   page: z.coerce.number().int().positive().optional().default(1),
   limit: z.coerce.number().int().min(1).max(100).optional().default(20),
-});
+}).transform((data) => ({
+  ...data,
+  scope: data.spendingScope || data.scope || 'ALL',
+}));
 
 export const createWalletSchema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(100),

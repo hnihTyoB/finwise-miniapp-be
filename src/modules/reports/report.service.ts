@@ -76,6 +76,7 @@ export class ReportService {
         period.to,
         query.walletId,
         scope.currency,
+        query.spendingScope,
       ),
       this.repository.findBudgets(userId, period.from, period.to, scope.currency),
       this.repository.findSavingGoals(userId, scope.currency),
@@ -145,6 +146,7 @@ export class ReportService {
       period.to,
       query.walletId,
       scope.currency,
+      query.spendingScope,
     );
     const knownCurrencies = this.getKnownCurrencies(scope.wallets, transactions, scope.currency);
     const granularity = this.resolveGranularity(query.granularity, period);
@@ -198,6 +200,7 @@ export class ReportService {
       period.to,
       query.walletId,
       scope.currency,
+      query.spendingScope,
     );
     const expenses = transactions.filter(
       (transaction) => transaction.type === TransactionType.EXPENSE,
@@ -271,6 +274,7 @@ export class ReportService {
         period.to,
         query.walletId,
         scope.currency,
+        query.spendingScope,
       ),
       this.repository.findBudgets(userId, period.from, period.to, scope.currency),
     ]);
@@ -307,6 +311,7 @@ export class ReportService {
       userId,
       query.walletId,
       selectedCurrency,
+      query.spendingScope,
     );
 
     return { wallets, currency: selectedCurrency };

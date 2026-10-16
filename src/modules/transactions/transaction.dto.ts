@@ -14,6 +14,7 @@ export interface TransactionQueryDto {
   walletId?: string;
   categoryId?: string;
   type?: TransactionType;
+  spendingScope?: 'ALL' | 'PERSONAL' | 'SHARED';
   dateFrom?: BusinessDate;
   dateTo?: BusinessDate;
   minAmount?: string;
@@ -48,6 +49,7 @@ export interface TransactionWalletDto {
   id: string;
   name: string;
   currency: string;
+  isShared?: boolean;
 }
 
 export interface TransactionCategoryDto {
@@ -58,8 +60,15 @@ export interface TransactionCategoryDto {
   color: string | null;
 }
 
+export interface TransactionCreatorDto {
+  id: string;
+  fullName: string | null;
+  avatarUrl: string | null;
+}
+
 export interface TransactionResponseDto {
   id: string;
+  userId?: string;
   walletId: string;
   categoryId: string;
   amount: string;
@@ -72,6 +81,9 @@ export interface TransactionResponseDto {
   updatedAt: Date;
   wallet: TransactionWalletDto;
   category: TransactionCategoryDto;
+  creator?: TransactionCreatorDto | null;
+  createdBy?: TransactionCreatorDto | null;
+  isSharedWallet?: boolean;
 }
 
 export interface TransactionListResponseDto {

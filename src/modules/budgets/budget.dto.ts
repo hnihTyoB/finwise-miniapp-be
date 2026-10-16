@@ -25,6 +25,7 @@ export interface BudgetQueryDto {
   period?: BudgetPeriod;
   currency?: string;
   categoryId?: string;
+  walletId?: string;
   activeAt?: BusinessDate;
   includeArchived: boolean;
   isRecurring?: boolean;
@@ -41,6 +42,7 @@ export interface CreateBudgetDto {
   type: BudgetType;
   period: BudgetPeriod;
   categoryId?: string | null;
+  walletId?: string | null;
   startDate: BusinessDate;
   endDate?: BusinessDate;
   alertThreshold: string;
@@ -57,6 +59,7 @@ export interface UpdateBudgetDto {
   type?: BudgetType;
   period?: BudgetPeriod;
   categoryId?: string | null;
+  walletId?: string | null;
   startDate?: BusinessDate;
   endDate?: BusinessDate;
   alertThreshold?: string;
@@ -77,6 +80,7 @@ export interface PersistBudgetDto {
   type: BudgetType;
   period: BudgetPeriod;
   categoryId: string | null;
+  walletId?: string | null;
   startDate: BusinessDate;
   endDate: BusinessDate;
   alertThreshold: string;
@@ -98,6 +102,12 @@ export interface BudgetCategoryDto {
   color: string | null;
 }
 
+export interface BudgetWalletDto {
+  id: string;
+  name: string;
+  currency: string;
+}
+
 export interface BudgetUsageDto {
   spentAmount: string;
   remainingAmount: string;
@@ -117,6 +127,7 @@ export interface BudgetResponseDto {
   type: BudgetType;
   period: BudgetPeriod;
   categoryId: string | null;
+  walletId: string | null;
   startDate: BusinessDate;
   endDate: BusinessDate;
   alertThreshold: string;
@@ -132,5 +143,6 @@ export interface BudgetResponseDto {
   createdAt: Date;
   updatedAt: Date;
   category: BudgetCategoryDto | null;
+  wallet?: BudgetWalletDto | null;
   usage: BudgetUsageDto;
 }

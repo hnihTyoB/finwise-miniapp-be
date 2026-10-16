@@ -5,6 +5,7 @@ export type WalletType = 'STANDARD' | 'SAVINGS_ACCOUNT';
 export interface WalletQueryDto {
   includeArchived: boolean;
   type?: WalletType;
+  scope?: 'ALL' | 'PERSONAL' | 'SHARED';
   sortBy: WalletSortField;
   order: SortOrder;
   page: number;
@@ -31,6 +32,13 @@ export interface UpdateWalletDto {
   description?: string | null;
 }
 
+export interface WalletMemberSummaryDto {
+  id: string;
+  fullName: string | null;
+  avatarUrl: string | null;
+  role: string;
+}
+
 export interface WalletResponseDto {
   id: string;
   name: string;
@@ -42,6 +50,10 @@ export interface WalletResponseDto {
   description: string | null;
   isDefault: boolean;
   isArchived: boolean;
+  isShared?: boolean;
+  myRole?: 'OWNER' | 'MEMBER' | 'VIEWER';
+  membersCount?: number;
+  membersSummary?: WalletMemberSummaryDto[];
   termDepositId?: string | null;
   createdAt: Date;
   updatedAt: Date;
