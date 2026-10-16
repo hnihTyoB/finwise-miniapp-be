@@ -16,6 +16,8 @@ import {
   PersistReminderDto,
   ReminderQueryDto,
 } from './reminder.dto';
+import { AppError } from '../../common/errors/app-error';
+import { ERROR_CODE } from '../../common/errors/error-code';
 
 const reminderSelect = {
   id: true,
@@ -92,7 +94,21 @@ export class ReminderRepository {
     });
   }
 
-  update(id: string, data: PersistReminderDto) {
+  async update(id: string, data: PersistReminderDto, userId?: string) {
+    if (userId) {
+      const result = await prisma.reminder.updateMany({
+        where: { id, userId },
+        data,
+      });
+      if (result.count === 0) {
+        throw new AppError('Reminder not found or access denied', 404, ERROR_CODE.NOT_FOUND);
+      }
+      return prisma.reminder.findUniqueOrThrow({
+        where: { id },
+        select: reminderSelect,
+      });
+    }
+
     return prisma.reminder.update({
       where: { id },
       data,
@@ -100,7 +116,16 @@ export class ReminderRepository {
     });
   }
 
-  remove(id: string) {
+  async remove(id: string, userId?: string) {
+    if (userId) {
+      const result = await prisma.reminder.deleteMany({
+        where: { id, userId },
+      });
+      if (result.count === 0) {
+        throw new AppError('Reminder not found or access denied', 404, ERROR_CODE.NOT_FOUND);
+      }
+      return { id };
+    }
     return prisma.reminder.delete({ where: { id }, select: { id: true } });
   }
 

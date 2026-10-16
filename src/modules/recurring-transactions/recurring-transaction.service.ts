@@ -170,7 +170,7 @@ export class RecurringTransactionService {
         nextRunAt: nextRunAt ? businessDateToPrismaDate(nextRunAt) : null,
         missedRunPolicy,
         isActive: current.isActive && nextRunAt !== null,
-      }, transaction);
+      }, transaction, userId);
 
       if (data.remindDaysBefore !== undefined) {
         await this.syncReminder(userId, id, updated, data.remindDaysBefore, transaction);
@@ -223,7 +223,7 @@ export class RecurringTransactionService {
         },
         data: { isActive: false },
       });
-      return this.repository.update(id, { isActive: false }, transaction);
+      return this.repository.update(id, { isActive: false }, transaction, userId);
     });
   }
 
@@ -277,7 +277,7 @@ export class RecurringTransactionService {
       return this.repository.update(id, {
         isActive: true,
         nextRunAt: businessDateToPrismaDate(nextRunAt),
-      }, transaction);
+      }, transaction, userId);
     });
   }
 
@@ -290,7 +290,7 @@ export class RecurringTransactionService {
           actionUrl: { startsWith: `/recurring-transactions?id=${id}` },
         },
       });
-      await this.repository.archive(id, transaction);
+      await this.repository.archive(id, transaction, userId);
     });
     return { id };
   }

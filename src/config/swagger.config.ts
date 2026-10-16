@@ -6585,6 +6585,155 @@ export const swaggerSpec = {
         },
       },
     },
+    '/savings': {
+      get: {
+        tags: ['Savings'],
+        summary: 'Lấy danh sách các sổ tiết kiệm có kỳ hạn',
+        description: 'Yêu cầu quyền SAVINGS_READ. Trả về danh sách kèm thông tin ví và lãi dự kiến.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'status', in: 'query', schema: { type: 'string', enum: ['ACTIVE', 'MATURED', 'SETTLED', 'EARLY_WITHDRAWN'] } },
+          { name: 'search', in: 'query', schema: { type: 'string' } },
+          { name: 'page', in: 'query', schema: { type: 'integer', default: 1 } },
+          { name: 'limit', in: 'query', schema: { type: 'integer', default: 20 } },
+        ],
+        responses: {
+          200: { description: 'Danh sách sổ tiết kiệm' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { description: 'Forbidden - Yêu cầu quyền SAVINGS_READ' },
+        },
+      },
+      post: {
+        tags: ['Savings'],
+        summary: 'Tạo sổ tiết kiệm có kỳ hạn mới',
+        description: 'Yêu cầu quyền SAVINGS_CREATE. Tự động trừ tiền từ ví nguồn và tạo ví chuyên biệt SAVINGS_ACCOUNT.',
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['bankName', 'principalAmount', 'interestRate', 'termMonths', 'sourceWalletId'],
+                properties: {
+                  bankName: { type: 'string', example: 'Vietcombank' },
+                  accountNumber: { type: 'string', example: '1023847589' },
+                  principalAmount: { type: 'string', example: '50000000' },
+                  interestRate: { type: 'string', example: '6.5' },
+                  termMonths: { type: 'integer', example: 12 },
+                  startDate: { type: 'string', format: 'date', example: '2026-10-16' },
+                  rolloverMethod: { type: 'string', enum: ['ROLLOVER_ALL', 'ROLLOVER_PRINCIPAL', 'SETTLE_TO_WALLET'], default: 'ROLLOVER_ALL' },
+                  sourceWalletId: { type: 'string', format: 'uuid' },
+                  targetWalletId: { type: 'string', format: 'uuid' },
+                  notes: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: { description: 'Đã tạo sổ tiết kiệm thành công' },
+          400: { description: 'Dữ liệu không hợp lệ hoặc ví nguồn không đủ số dư' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { description: 'Forbidden - Yêu cầu quyền SAVINGS_CREATE' },
+        },
+      },
+    },
+    '/savings/preview': {
+      post: {
+        tags: ['Savings'],
+        summary: 'Xem trước tính toán lãi tiết kiệm (không lưu DB)',
+        description: 'Yêu cầu quyền SAVINGS_READ.',
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['principalAmount', 'interestRate', 'termMonths'],
+                properties: {
+                  principalAmount: { type: 'string', example: '50000000' },
+                  interestRate: { type: 'string', example: '6.5' },
+                  termMonths: { type: 'integer', example: 12 },
+                  startDate: { type: 'string', format: 'date' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Kết quả dự tính lãi' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { description: 'Forbidden' },
+        },
+      },
+    },
+    '/savings/{id}': {
+      get: {
+        tags: ['Savings'],
+        summary: 'Xem chi tiết một sổ tiết kiệm',
+        description: 'Yêu cầu quyền SAVINGS_READ.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+        ],
+        responses: {
+          200: { description: 'Chi tiết sổ tiết kiệm' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { description: 'Forbidden' },
+          404: { description: 'Không tìm thấy sổ tiết kiệm' },
+        },
+      },
+      put: {
+        tags: ['Savings'],
+        summary: 'Cập nhật thông tin sổ tiết kiệm',
+        description: 'Yêu cầu quyền SAVINGS_UPDATE.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+        ],
+        responses: {
+          200: { description: 'Đã cập nhật sổ tiết kiệm thành công' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { description: 'Forbidden - Yêu cầu quyền SAVINGS_UPDATE' },
+          404: { description: 'Không tìm thấy sổ tiết kiệm' },
+        },
+      },
+    },
+    '/savings/{id}/settle': {
+      post: {
+        tags: ['Savings'],
+        summary: 'Tất toán hoặc rút trước hạn sổ tiết kiệm',
+        description: 'Yêu cầu quyền SAVINGS_SETTLE. Hoàn trả gốc và lãi vào ví đích, đóng ví sổ tiết kiệm.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+        ],
+        requestBody: {
+          required: false,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  targetWalletId: { type: 'string', format: 'uuid' },
+                  isEarlyWithdrawal: { type: 'boolean', default: false },
+                  notes: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Tất toán thành công' },
+          400: { description: 'Yêu cầu tất toán không hợp lệ' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { description: 'Forbidden - Yêu cầu quyền SAVINGS_SETTLE' },
+          404: { description: 'Không tìm thấy sổ tiết kiệm' },
+        },
+      },
+    },
   },
 };
 

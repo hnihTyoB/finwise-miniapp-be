@@ -39,6 +39,17 @@ export function errorMiddleware(
     return;
   }
 
+  // Handle BodyParser entity.too.large / 413 Payload Too Large
+  const anyError = error as { type?: string; status?: number; statusCode?: number };
+  if (anyError.type === 'entity.too.large' || anyError.status === 413 || anyError.statusCode === 413) {
+    res.status(413).json({
+      success: false,
+      message: 'Payload too large',
+      code: 'PAYLOAD_TOO_LARGE',
+    });
+    return;
+  }
+
   console.error('[Unhandled Error]', error);
 
   res.status(500).json({

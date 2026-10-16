@@ -166,6 +166,11 @@ async function main() {
     // HANDOVER
     { name: 'HANDOVER_INITIATE', resource: 'HANDOVER', action: 'INITIATE', description: 'Khởi tạo phiên chuyển giao quyền sở hữu tài khoản', isSystem: true },
     { name: 'HANDOVER_CLAIM', resource: 'HANDOVER', action: 'CLAIM', description: 'Kết nối và tiếp nhận quyền sở hữu tài khoản', isSystem: true },
+    // SAVINGS
+    { name: 'SAVINGS_READ', resource: 'SAVINGS', action: 'READ', description: 'Xem danh sách và chi tiết sổ tiết kiệm', isSystem: true },
+    { name: 'SAVINGS_CREATE', resource: 'SAVINGS', action: 'CREATE', description: 'Tạo sổ tiết kiệm mới', isSystem: true },
+    { name: 'SAVINGS_UPDATE', resource: 'SAVINGS', action: 'UPDATE', description: 'Cập nhật thông tin sổ tiết kiệm', isSystem: true },
+    { name: 'SAVINGS_SETTLE', resource: 'SAVINGS', action: 'SETTLE', description: 'Tất toán hoặc rút trước hạn sổ tiết kiệm', isSystem: true },
   ];
 
   const permissionMap: Record<string, string> = {};
@@ -243,6 +248,7 @@ async function main() {
     'DEBT_READ', 'DEBT_CREATE', 'DEBT_UPDATE', 'DEBT_DELETE', 'DEBT_SETTLE',
     'BACKUP_EXPORT', 'BACKUP_IMPORT',
     'HANDOVER_INITIATE', 'HANDOVER_CLAIM',
+    'SAVINGS_READ', 'SAVINGS_CREATE', 'SAVINGS_UPDATE', 'SAVINGS_SETTLE',
   ];
 
   for (const permName of userPermissions) {

@@ -359,5 +359,11 @@ export class AuthRepository {
       },
     });
   }
+
+  async deleteAllSessions(userId: string) {
+    return prisma.refreshToken.deleteMany({
+      where: { userId },
+    });
+  }
 }
 

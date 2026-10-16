@@ -365,6 +365,7 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(data.newPassword, 10);
     await this.repository.updatePassword(userId, passwordHash);
+    await this.repository.deleteAllSessions(userId);
   }
 
   async softDeleteUser(userId: string, adminId: string): Promise<void> {
@@ -413,6 +414,7 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(data.newPassword, 10);
     await this.repository.updatePassword(resetToken.userId, passwordHash);
     await this.repository.deletePasswordResetToken(resetToken.id);
+    await this.repository.deleteAllSessions(resetToken.userId);
   }
 
   async resendVerification(data: ResendVerificationDto): Promise<void> {

@@ -109,7 +109,7 @@ export class HandoverService {
     await this.repository.saveSession(session, this.HANDOVER_TTL_SECONDS);
 
     console.log(
-      `[Handover] Initiated session ${handoverToken} for user ${userId} (email: ${user.email}, pin: ${pinCode})`,
+      `[Handover] Initiated session ${handoverToken} for user ${userId} (email: ${user.email})`,
     );
 
     await this.repository.createAuditLog({
@@ -118,7 +118,6 @@ export class HandoverService {
       targetType: 'HANDOVER',
       newState: {
         handoverToken,
-        pinCode,
         expiresAt: session.expiresAt,
       },
       ipAddress: metadata?.ipAddress,
@@ -177,7 +176,7 @@ export class HandoverService {
         session.status === 'CLAIMED'
           ? `Mã xác thực OTP gồm 6 chữ số đã được gửi đến email ${maskedEmail || 'liên kết'}. Vui lòng nhập mã để xác nhận chuyển toàn bộ dữ liệu sang tài khoản ${session.targetUserName || 'mới'}.`
           : undefined,
-      otpCodeDev: process.env.NODE_ENV !== 'production' ? session.otpCode : undefined,
+      otpCodeDev: process.env.NODE_ENV === 'test' ? session.otpCode : undefined,
     };
   }
 
