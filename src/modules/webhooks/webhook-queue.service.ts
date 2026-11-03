@@ -123,6 +123,11 @@ export class WebhookQueueService {
    * Xử lý gửi Webhook HTTP request an toàn (SSRF protected + HMAC signed).
    */
   async processJob(data: WebhookJobData, attemptNumber: number): Promise<void> {
+    if (!data || typeof data !== 'object' || !data.deliveryId || !data.url || !data.secretEncrypted) {
+      console.warn('[WebhookQueue] Dropping malformed or poisoned webhook job payload:', data);
+      return;
+    }
+
     const { deliveryId, url, secretEncrypted, event, eventId, payload } = data;
     const now = new Date();
 
@@ -130,16 +135,19 @@ export class WebhookQueueService {
     try {
       secret = decryptSecret(secretEncrypted);
     } catch (err: any) {
-      await prisma.webhookDelivery.update({
-        where: { id: deliveryId },
-        data: {
-          status: WebhookDeliveryStatus.FAILED,
-          errorMessage: `Decryption error: ${err?.message || 'Invalid secret'}`,
-          attemptCount: attemptNumber,
-          lastAttemptAt: now,
-        },
-      });
-      throw err;
+      console.error(`[WebhookQueue] Unrecoverable decryption error for delivery ${deliveryId}:`, err?.message);
+      try {
+        await prisma.webhookDelivery.update({
+          where: { id: deliveryId },
+          data: {
+            status: WebhookDeliveryStatus.FAILED,
+            errorMessage: `Decryption error (unrecoverable): ${err?.message || 'Invalid secret'}`,
+            attemptCount: attemptNumber,
+            lastAttemptAt: now,
+          },
+        });
+      } catch {}
+      return; // Do NOT rethrow to prevent BullMQ retry loop & worker starvation
     }
 
     const payloadString = JSON.stringify({

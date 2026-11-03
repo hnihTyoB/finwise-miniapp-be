@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../../middlewares/auth.middleware';
-import { requirePermission } from '../../middlewares/permission.middleware';
+import { requirePermission, requireAnyPermission } from '../../middlewares/permission.middleware';
 import { validate } from '../../middlewares/validate.middleware';
 import { PERMISSIONS } from '../../common/constants';
 import { auditLogQuerySchema, archiveCleanupAuditLogSchema } from './audit-log.validation';
@@ -19,7 +19,7 @@ auditLogsRouter.get(
 auditLogsRouter.post(
   '/archive-cleanup',
   authMiddleware,
-  requirePermission(PERMISSIONS.AUDIT_LOG_READ),
+  requireAnyPermission(PERMISSIONS.AUDIT_LOG_ARCHIVE, PERMISSIONS.SYSTEM_CONFIG_UPDATE),
   validate(archiveCleanupAuditLogSchema, 'body'),
   auditLogController.archiveAndCleanupAuditLogs,
 );

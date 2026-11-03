@@ -15,6 +15,15 @@ import {
   QueryTransactionItemDto,
 } from './query.dto';
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 export class QueryCompiler {
   static resolveDateRange(timeRange: { type: QueryTimeRangeType; dateFrom?: string; dateTo?: string }): {
     from: BusinessDate;
@@ -164,7 +173,8 @@ export class QueryCompiler {
         }));
       }
 
-      const entityLabel = ast.walletNames?.length ? `ví ${ast.walletNames.join(', ')}` : '';
+      const safeWalletNames = ast.walletNames?.map((n) => escapeHtml(n.trim())).filter(Boolean) || [];
+      const entityLabel = safeWalletNames.length ? `ví ${safeWalletNames.join(', ')}` : '';
       const summary = count === 0
         ? `Không tìm thấy giao dịch chuyển khoản nào ${entityLabel ? `thuộc ${entityLabel} ` : ''}trong khoảng thời gian ${timeRangeDesc}.`
         : `Tổng chuyển khoản ${entityLabel ? `thuộc ${entityLabel} ` : ''}trong ${timeRangeDesc} là ${totalVal.toLocaleString('vi-VN')} VND qua ${count} giao dịch (bình quân: ${Math.round(avgVal).toLocaleString('vi-VN')} VND/giao dịch).`;
@@ -302,10 +312,12 @@ export class QueryCompiler {
         ? 'thu nhập'
         : 'chi tiêu';
 
-    const entityLabel = ast.categoryNames?.length
-      ? `danh mục ${ast.categoryNames.join(', ')}`
-      : ast.walletNames?.length
-        ? `ví ${ast.walletNames.join(', ')}`
+    const safeCategoryNames = ast.categoryNames?.map((n) => escapeHtml(n.trim())).filter(Boolean) || [];
+    const safeWalletNames = ast.walletNames?.map((n) => escapeHtml(n.trim())).filter(Boolean) || [];
+    const entityLabel = safeCategoryNames.length
+      ? `danh mục ${safeCategoryNames.join(', ')}`
+      : safeWalletNames.length
+        ? `ví ${safeWalletNames.join(', ')}`
         : '';
 
     // Group by wallet to resolve distinct currencies

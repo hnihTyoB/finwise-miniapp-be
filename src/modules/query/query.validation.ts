@@ -25,10 +25,10 @@ export const executeQuerySchema = z.object({
         dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
       }),
       transactionType: z.enum(['INCOME', 'EXPENSE', 'TRANSFER', 'ALL']).default('EXPENSE'),
-      categoryIds: z.array(z.string().uuid()).optional(),
-      categoryNames: z.array(z.string()).optional(),
-      walletIds: z.array(z.string().uuid()).optional(),
-      walletNames: z.array(z.string()).optional(),
+      categoryIds: z.array(z.string().uuid()).max(20).optional(),
+      categoryNames: z.array(z.string().trim().max(50)).max(20).optional(),
+      walletIds: z.array(z.string().uuid()).max(20).optional(),
+      walletNames: z.array(z.string().trim().max(50)).max(20).optional(),
       amountFilter: z
         .object({
           minAmount: z.number().nonnegative().optional(),

@@ -9,6 +9,7 @@ import {
 } from './forecast.dto';
 
 const LAMBDA_DECAY = 0.04; // Exponential weighting factor for recent days
+const MAX_RUNWAY_PROJECTION_DAYS = 3650; // 10 years realistic cap for financial runway depletion
 
 export interface DailyBucket {
   date: BusinessDate;
@@ -127,9 +128,23 @@ export class ForecastMathEngine {
     if (netDailyFlow < 0 && currentBalance.greaterThan(0)) {
       const burnRatePerDay = Math.abs(netDailyFlow);
       const daysToZero = Math.floor(currentBalance.toNumber() / burnRatePerDay);
-      runwayDays = daysToZero;
-      depletionDate = addBusinessDays(asOfDate, daysToZero);
-      isDepletionProjected = true;
+
+      // Only project depletion if it occurs within a realistic horizon (<= 10 years)
+      if (daysToZero <= MAX_RUNWAY_PROJECTION_DAYS) {
+        runwayDays = daysToZero;
+        try {
+          depletionDate = addBusinessDays(asOfDate, daysToZero);
+          isDepletionProjected = true;
+        } catch {
+          runwayDays = null;
+          depletionDate = null;
+          isDepletionProjected = false;
+        }
+      } else {
+        runwayDays = null;
+        depletionDate = null;
+        isDepletionProjected = false;
+      }
     } else if (currentBalance.lessThanOrEqualTo(0)) {
       runwayDays = 0;
       depletionDate = asOfDate;

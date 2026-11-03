@@ -14,5 +14,5 @@ export const auditLogQuerySchema = z.object({
 });
 
 export const archiveCleanupAuditLogSchema = z.object({
-  retentionDays: z.coerce.number().int().min(1).max(3650).optional(),
+  retentionDays: z.coerce.number().int().min(30, 'Thời gian lưu trữ tối thiểu trước khi dọn dẹp là 30 ngày').max(3650).optional(),
 });
