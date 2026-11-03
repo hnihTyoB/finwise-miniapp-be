@@ -15,10 +15,7 @@ export function validate(schema: ZodSchema, target: ValidateTarget = 'body') {
     const result = schema.safeParse(input);
 
     if (!result.success) {
-      const messages = result.error.errors
-        .map((e) => `${e.path.join('.')}: ${e.message}`)
-        .join(', ');
-      next(new AppError(messages, 422, ERROR_CODE.VALIDATION_ERROR));
+      next(result.error);
       return;
     }
 

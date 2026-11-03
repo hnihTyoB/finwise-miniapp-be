@@ -7,6 +7,25 @@ interface RateLimitRecord {
   resetAt: number;
 }
 
+export const MAX_RATE_LIMIT_ENTRIES = 10_000;
+
+export function pruneRateLimitMap(map: Map<string, RateLimitRecord>, now: number): void {
+  for (const [key, record] of map.entries()) {
+    if (now >= record.resetAt) {
+      map.delete(key);
+    }
+  }
+  if (map.size >= MAX_RATE_LIMIT_ENTRIES) {
+    const toDelete = Math.ceil(MAX_RATE_LIMIT_ENTRIES * 0.1);
+    let count = 0;
+    for (const key of map.keys()) {
+      map.delete(key);
+      count++;
+      if (count >= toDelete) break;
+    }
+  }
+}
+
 const requestCounts = new Map<string, RateLimitRecord>();
 let lastCleanupAt = 0;
 
@@ -26,14 +45,26 @@ export async function rateLimitMiddleware(
   if (isUsingRedis && redisClient) {
     try {
       const redisKey = `finwise:rate-limit:${ip}`;
-      const currentCount = await redisClient.incr(redisKey);
-      
-      if (currentCount === 1) {
-        await redisClient.pexpire(redisKey, windowMs);
+      const results = await redisClient
+        .pipeline()
+        .incr(redisKey)
+        .pttl(redisKey)
+        .exec();
+
+      if (!results || results[0][0] || results[1][0]) {
+        throw new Error('Redis pipeline rate limit failed');
       }
-      
+
+      const currentCount = results[0][1] as number;
+      let ttlMs = results[1][1] as number;
+
+      // SEC-W0-01: Ensure TTL is always set on first request or recovered if key lacks TTL (prevent permanent lockout)
+      if (currentCount === 1 || ttlMs < 0) {
+        await redisClient.pexpire(redisKey, windowMs);
+        ttlMs = windowMs;
+      }
+
       if (currentCount > maxRequests) {
-        const ttlMs = await redisClient.pttl(redisKey);
         const retryAfterSeconds = Math.max(1, Math.ceil(ttlMs / 1000));
         res.setHeader('Retry-After', retryAfterSeconds.toString());
         res.status(429).json({
@@ -52,13 +83,9 @@ export async function rateLimitMiddleware(
     }
   }
 
-  // Memory-safe rate limit fallback
-  if (now - lastCleanupAt >= windowMs) {
-    requestCounts.forEach((record, key) => {
-      if (now >= record.resetAt) {
-        requestCounts.delete(key);
-      }
-    });
+  // SEC-W0-06: Memory-safe rate limit fallback with strict cardinality bound
+  if (now - lastCleanupAt >= windowMs || requestCounts.size >= MAX_RATE_LIMIT_ENTRIES) {
+    pruneRateLimitMap(requestCounts, now);
     lastCleanupAt = now;
   }
 
@@ -113,12 +140,26 @@ export function createRateLimiter(options: {
     if (isUsingRedis && redisClient) {
       try {
         const redisKey = `finwise:${keyPrefix}:${ip}`;
-        const currentCount = await redisClient.incr(redisKey);
-        if (currentCount === 1) {
-          await redisClient.pexpire(redisKey, windowMs);
+        const results = await redisClient
+          .pipeline()
+          .incr(redisKey)
+          .pttl(redisKey)
+          .exec();
+
+        if (!results || results[0][0] || results[1][0]) {
+          throw new Error('Redis pipeline rate limit failed');
         }
+
+        const currentCount = results[0][1] as number;
+        let ttlMs = results[1][1] as number;
+
+        // SEC-W0-01: Ensure TTL is always set on first request or recovered if key lacks TTL
+        if (currentCount === 1 || ttlMs < 0) {
+          await redisClient.pexpire(redisKey, windowMs);
+          ttlMs = windowMs;
+        }
+
         if (currentCount > maxRequests) {
-          const ttlMs = await redisClient.pttl(redisKey);
           const retryAfterSeconds = Math.max(1, Math.ceil(ttlMs / 1000));
           res.setHeader('Retry-After', retryAfterSeconds.toString());
           res.status(429).json({
@@ -135,10 +176,8 @@ export function createRateLimiter(options: {
       }
     }
 
-    if (now - localLastCleanup >= windowMs) {
-      localCounts.forEach((rec, key) => {
-        if (now >= rec.resetAt) localCounts.delete(key);
-      });
+    if (now - localLastCleanup >= windowMs || localCounts.size >= MAX_RATE_LIMIT_ENTRIES) {
+      pruneRateLimitMap(localCounts, now);
       localLastCleanup = now;
     }
 

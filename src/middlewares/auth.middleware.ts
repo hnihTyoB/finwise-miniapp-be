@@ -24,8 +24,10 @@ export async function authMiddleware(
     token = req.cookies.accessToken;
   }
 
-  // Allow query token ONLY for EventSource / SSE connection endpoints
-  const isSseRequest = req.path.endsWith('/stream') || req.headers.accept?.includes('text/event-stream');
+  // Allow query token ONLY for EventSource / SSE connection endpoints (strictly GET on /stream routes)
+  const isSseRequest =
+    req.method === 'GET' &&
+    (req.path.endsWith('/stream') || (req.originalUrl || '').split('?')[0].endsWith('/stream'));
   if (!token && isSseRequest && typeof req.query?.token === 'string') {
     token = req.query.token;
   }
@@ -36,7 +38,9 @@ export async function authMiddleware(
   }
 
   try {
-    const payload = jwt.verify(token, jwtConfig.accessSecret) as {
+    const payload = jwt.verify(token, jwtConfig.accessSecret, {
+      algorithms: ['HS256'],
+    }) as {
       id: string;
       email: string;
       role: string;
