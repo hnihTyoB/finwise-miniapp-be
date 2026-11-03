@@ -6,6 +6,7 @@ import { ReceiptFileService, StoredReceipt } from './receipt-file.service';
 import { cacheService } from '../../common/services/cache.service';
 import { webhookService } from '../webhooks/webhook.service';
 import { SharedWalletService } from '../wallets/shared-wallet.service';
+import { prismaDateToBusinessDate } from '../../common/date-time/business-time';
 import {
   CreateTransactionDto,
   TransactionQueryDto,
@@ -37,14 +38,16 @@ export class TransactionService {
   }
 
   async create(userId: string, data: CreateTransactionDto) {
-    await this.sharedWalletService.assertCanCreateTransaction(
-      userId,
-      data.walletId,
-      new Prisma.Decimal(data.amount),
-      data.type,
-    );
-
     const created = await this.repository.runSerializable(async (transaction) => {
+      await this.sharedWalletService.assertCanCreateTransaction(
+        userId,
+        data.walletId,
+        new Prisma.Decimal(data.amount),
+        data.type,
+        data.date,
+        transaction,
+      );
+
       await this.ensureValidRelations(
         userId,
         data.walletId,
@@ -126,6 +129,8 @@ export class TransactionService {
         current.type,
         nextAmount,
         nextType,
+        data.date ?? (typeof current.date === 'string' ? current.date : prismaDateToBusinessDate(current.date)),
+        transaction,
       );
 
       await this.ensureValidRelations(
@@ -177,6 +182,13 @@ export class TransactionService {
         throw new AppError('Wallet not found', 404, ERROR_CODE.NOT_FOUND);
       }
 
+      if (wallet.isArchived) {
+        throw new AppError('Archived wallet cannot be modified', 409, ERROR_CODE.WALLET_ARCHIVED);
+      }
+
+      // Assert caller is not a read-only VIEWER in shared wallet
+      await this.sharedWalletService.assertCanDeleteTransaction(userId, current.walletId, transaction);
+
       // Check permissions: only creator or wallet owner can delete
       const isCreator = current.userId === userId;
       const isOwner = wallet.userId === userId;
@@ -205,7 +217,8 @@ export class TransactionService {
     id: string,
     file: Express.Multer.File,
   ) {
-    await this.findById(userId, id);
+    const current = await this.findById(userId, id);
+    await this.sharedWalletService.assertCanDeleteTransaction(userId, current.walletId);
     const receiptKey = await this.receiptFiles.save(userId, file);
 
     try {
@@ -238,6 +251,9 @@ export class TransactionService {
   }
 
   async deleteReceipt(userId: string, id: string) {
+    const current = await this.findById(userId, id);
+    await this.sharedWalletService.assertCanDeleteTransaction(userId, current.walletId);
+
     const result = await this.repository.replaceReceipt(userId, id, null);
     if (!result) {
       throw new AppError('Transaction not found', 404, ERROR_CODE.NOT_FOUND);

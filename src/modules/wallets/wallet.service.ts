@@ -121,12 +121,19 @@ export class WalletService {
 
   async restore(userId: string, id: string) {
     const wallet = await this.findById(userId, id);
+    if (wallet.myRole !== 'OWNER') {
+      throw new AppError('Chỉ chủ ví mới có quyền phục hồi ví đã lưu trữ', 403, ERROR_CODE.FORBIDDEN);
+    }
 
     if (!wallet.isArchived) {
       return wallet;
     }
 
     const restoredWallet = await this.repository.restore(userId, id);
+    if (!restoredWallet) {
+      throw new AppError('Wallet not found', 404, ERROR_CODE.NOT_FOUND);
+    }
+
     await this.invalidateReportCache(userId);
     return restoredWallet;
   }
