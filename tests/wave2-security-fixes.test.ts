@@ -319,27 +319,21 @@ describe('Wave 2 Security Fixes Verification Tests (SEC-W2-01, SEC-W2-02, SEC-W2
       const transactionRepo = new TransactionRepository();
       const uniqueSuffix = Date.now().toString().slice(-6);
 
-      const defaultRole = await prisma.role.findFirst({ where: { name: 'USER' } });
-
       const owner = await prisma.user.create({
         data: {
-          email: `owner_${uniqueSuffix}@example.com`,
           phoneNumber: `+8498888${uniqueSuffix}`,
-          password: 'dummy',
+          passwordHash: 'dummy',
           fullName: 'Owner User',
-          roleId: defaultRole!.id,
-          isActive: true,
+          status: 'ACTIVE',
         },
       });
 
       const member = await prisma.user.create({
         data: {
-          email: `member_${uniqueSuffix}@example.com`,
           phoneNumber: `+8498889${uniqueSuffix}`,
-          password: 'dummy',
+          passwordHash: 'dummy',
           fullName: 'Member User',
-          roleId: defaultRole!.id,
-          isActive: true,
+          status: 'ACTIVE',
         },
       });
 
