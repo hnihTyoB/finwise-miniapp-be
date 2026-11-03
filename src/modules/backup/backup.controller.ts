@@ -11,9 +11,17 @@ export class BackupController {
   async exportBackup(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = req.user!.id;
-      const queryPassword = req.query.password as string | undefined;
-      const bodyPassword = req.body?.password as string | undefined;
-      const password = queryPassword || bodyPassword;
+
+      // SEC-W3-06: Forbid passing sensitive password in URL query parameters (CWE-598)
+      if (req.query.password) {
+        throw new AppError(
+          'Không được truyền mật khẩu bảo vệ bản sao lưu qua URL query parameter. Vui lòng sử dụng POST với body JSON để đảm bảo an toàn thông tin.',
+          400,
+          ERROR_CODE.VALIDATION_ERROR,
+        );
+      }
+
+      const password = req.body?.password as string | undefined;
 
       if (password) {
         exportBackupSchema.parse({ password });

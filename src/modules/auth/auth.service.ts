@@ -11,6 +11,7 @@ import { MailService } from '../../common/services/mail.service';
 import { generateDeviceHash, parseUserAgent } from '../../common/helpers/user-agent.helper';
 import { rbacService } from '../rbac/rbac.service';
 import { SYSTEM_ROLES } from '../../common/constants';
+import { envConfig } from '../../config/env.config';
 
 import { UploadService } from '../uploads/upload.service';
 
@@ -452,8 +453,19 @@ export class AuthService {
       return this.getMe(userId);
     }
 
+    // SEC-W3-01: Validate that if avatarUrl points to Cloudflare R2 storage, it strictly belongs to userId
+    if (data.avatarUrl) {
+      const config = envConfig.r2;
+      if (config.publicBaseUrl && data.avatarUrl.startsWith(config.publicBaseUrl)) {
+        const expectedPrefix = `${config.publicBaseUrl}/avatars/${userId}/`;
+        if (!data.avatarUrl.startsWith(expectedPrefix)) {
+          throw new AppError('Avatar URL must belong to the authenticated user', 403, ERROR_CODE.FORBIDDEN);
+        }
+      }
+    }
+
     if (user.avatarUrl && user.avatarUrl !== data.avatarUrl) {
-      await this.uploadService.deleteFileByUrl(user.avatarUrl);
+      await this.uploadService.deleteFileByUrl(user.avatarUrl, userId);
     }
 
     const avatarData = data.avatarUrl === null

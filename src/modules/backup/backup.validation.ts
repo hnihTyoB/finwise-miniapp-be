@@ -118,7 +118,11 @@ export const backupFileStructureSchema = z.object({
     .object({
       algorithm: z.string(),
       kdf: z.string(),
-      iterations: z.number().int().positive(),
+      iterations: z
+        .number()
+        .int()
+        .min(1000, 'Số vòng lặp PBKDF2 tối thiểu là 1,000')
+        .max(600000, 'Số vòng lặp PBKDF2 tối đa là 600,000'),
       salt: z.string(),
       iv: z.string(),
       tag: z.string(),

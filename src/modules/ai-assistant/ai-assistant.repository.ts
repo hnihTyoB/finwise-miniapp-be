@@ -125,9 +125,10 @@ export class AIAssistantRepository {
   ): Promise<AIFinancialContextRecord> {
     const businessFrom = businessDateToPrismaDate(instantToBusinessDate(from));
     const businessTo = businessDateToPrismaDate(instantToBusinessDate(to));
+    // SEC-W3-07: Use lte for inclusive end date boundary (prevent dropping transactions on dateTo)
     const transactionWhere: Prisma.TransactionWhereInput = {
       userId,
-      date: { gte: businessFrom, lt: businessTo },
+      date: { gte: businessFrom, lte: businessTo },
       ...(currency ? { wallet: { currency } } : {}),
     };
     const [
@@ -168,7 +169,7 @@ export class AIAssistantRepository {
           where: {
             userId,
             isArchived: false,
-            startDate: { lt: businessTo },
+            startDate: { lte: businessTo },
             endDate: { gte: businessFrom },
             ...(currency ? { currency } : {}),
           },
@@ -180,7 +181,7 @@ export class AIAssistantRepository {
           where: {
             userId,
             isArchived: false,
-            startDate: { lt: businessTo },
+            startDate: { lte: businessTo },
             endDate: { gte: businessFrom },
             ...(currency ? { currency } : {}),
           },

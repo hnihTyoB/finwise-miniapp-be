@@ -73,7 +73,7 @@ export class UploadService {
     };
   }
 
-  async deleteFileByUrl(url: string): Promise<void> {
+  async deleteFileByUrl(url: string, expectedUserId?: string): Promise<void> {
     if (!url) return;
 
     const config = envConfig.r2;
@@ -100,6 +100,18 @@ export class UploadService {
       if (!objectKey) return;
 
       objectKey = decodeURIComponent(objectKey);
+
+      // SEC-W3-01: Enforce tenant boundary - prevent arbitrary or cross-user cloud storage object deletion
+      if (expectedUserId) {
+        const expectedPrefix = `avatars/${expectedUserId}/`;
+        if (!objectKey.startsWith(expectedPrefix)) {
+          this.logger.warn(`Security alert: Rejected attempt to delete foreign storage object: ${objectKey} by user: ${expectedUserId}`);
+          return;
+        }
+      } else if (!objectKey.startsWith('avatars/')) {
+        this.logger.warn(`Security alert: Rejected attempt to delete non-avatar storage object: ${objectKey}`);
+        return;
+      }
 
       const client = new S3Client({
         region: 'auto',

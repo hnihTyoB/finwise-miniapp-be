@@ -365,6 +365,7 @@ export class BackupService {
               description: w.description,
               isDefault: isFirstUserWallet || (w.isDefault ?? false),
               isArchived: w.isArchived ?? false,
+              type: 'STANDARD',
             },
           });
 
@@ -484,6 +485,15 @@ export class BackupService {
 
         existingTxKeys.add(dedupKey);
 
+        // SEC-W3-03: Validate receiptUrl strictly belongs to the current importing userId
+        let safeReceiptUrl: string | null = null;
+        if (t.receiptUrl && typeof t.receiptUrl === 'string') {
+          const expectedPrefix = `receipts/${userId}/`;
+          if (t.receiptUrl.startsWith(expectedPrefix)) {
+            safeReceiptUrl = t.receiptUrl;
+          }
+        }
+
         await tx.transaction.create({
           data: {
             userId,
@@ -492,7 +502,7 @@ export class BackupService {
             amount: amountDec,
             type: t.type,
             description: t.description,
-            receiptUrl: t.receiptUrl,
+            receiptUrl: safeReceiptUrl,
             location: t.location,
             date: new Date(dateStr),
           },

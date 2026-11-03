@@ -406,7 +406,7 @@ export class TransactionRepository {
       ...(opts.walletId ? { walletId: opts.walletId } : {}),
       date: {
         gte: opts.dateFrom,
-        lt: opts.dateTo,
+        lte: opts.dateTo,
       },
       ...(opts.cursor
         ? {
