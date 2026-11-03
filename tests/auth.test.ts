@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import request from 'supertest';
 import app from '../src/app';
 import { prisma } from '../src/database/prisma.client';
@@ -45,6 +46,7 @@ describe('Auth Integration Tests', () => {
   let verificationToken = '';
   let accessTokenCookie = '';
   let accessTokenHeader = '';
+  let loginRefreshToken = '';
 
   it('should register a new user successfully', async () => {
     const res = await request(app)
@@ -108,6 +110,7 @@ describe('Auth Integration Tests', () => {
     expect(res.body.data.user).toHaveProperty('email', testUser.email);
     expect(res.body.data).toHaveProperty('accessToken');
     expect(res.body.data).toHaveProperty('refreshToken');
+    loginRefreshToken = res.body.data.refreshToken;
 
     // Lấy cookie
     const cookies = (res.headers['set-cookie'] || []) as string[];
@@ -245,11 +248,7 @@ describe('Auth Integration Tests', () => {
   });
 
   it('should switch account successfully with valid refreshToken and rotate token', async () => {
-    const dbUser = await prisma.user.findUnique({
-      where: { email: testUser.email },
-      include: { refreshTokens: true },
-    });
-    const oldRefreshToken = dbUser?.refreshTokens[0]?.token || '';
+    const oldRefreshToken = loginRefreshToken;
     expect(oldRefreshToken).not.toBe('');
 
     const res = await request(app)
@@ -264,31 +263,39 @@ describe('Auth Integration Tests', () => {
     expect(typeof res.body.data.refreshToken).toBe('string');
     expect(res.body.data.refreshToken).not.toBe(oldRefreshToken);
 
-    // Verify old refresh token was rotated out from database
-    const oldTokenInDb = await prisma.refreshToken.findUnique({
-      where: { token: oldRefreshToken },
+    // Verify old refresh token was rotated out from database (checked by both hash and raw)
+    const oldTokenHash = crypto.createHash('sha256').update(oldRefreshToken).digest('hex');
+    const oldTokenInDb = await prisma.refreshToken.findFirst({
+      where: {
+        OR: [{ token: oldRefreshToken }, { token: oldTokenHash }],
+      },
     });
     expect(oldTokenInDb).toBeNull();
 
-    // Verify new refresh token exists in database
-    const newTokenInDb = await prisma.refreshToken.findUnique({
-      where: { token: res.body.data.refreshToken },
+    // Verify new refresh token exists in database (stored in hashed format)
+    const newTokenHash = crypto.createHash('sha256').update(res.body.data.refreshToken).digest('hex');
+    const newTokenInDb = await prisma.refreshToken.findFirst({
+      where: {
+        OR: [{ token: res.body.data.refreshToken }, { token: newTokenHash }],
+      },
     });
     expect(newTokenInDb).not.toBeNull();
 
     // Verify zaloLinked boolean resolution
     expect(typeof res.body.data.user.zaloLinked).toBe('boolean');
 
+    const currentUser = await prisma.user.findUnique({ where: { email: testUser.email } });
+
     // Verify audit log entry was created via repository
     const auditLogEntry = await prisma.auditLog.findFirst({
       where: {
         action: 'AUTH_ACCOUNT_SWITCH',
-        targetId: dbUser?.id,
+        targetId: currentUser?.id,
       },
       orderBy: { createdAt: 'desc' },
     });
     expect(auditLogEntry).not.toBeNull();
-    expect(auditLogEntry?.actorId).toBe(dbUser?.id);
+    expect(auditLogEntry?.actorId).toBe(currentUser?.id);
 
     // Update tokens for subsequent tests
     accessTokenHeader = res.body.data.accessToken;

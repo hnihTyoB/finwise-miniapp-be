@@ -43,6 +43,16 @@ export class WebhookRepository {
     });
   }
 
+  async countActiveByUserId(userId: string): Promise<number> {
+    return prisma.webhookEndpoint.count({
+      where: {
+        userId,
+        status: WebhookStatus.ACTIVE,
+        deletedAt: null,
+      },
+    });
+  }
+
   async findByIdAndUserId(id: string, userId: string): Promise<WebhookEndpoint | null> {
     return prisma.webhookEndpoint.findFirst({
       where: {

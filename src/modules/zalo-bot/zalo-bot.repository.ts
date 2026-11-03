@@ -162,23 +162,46 @@ export class ZaloBotRepository {
 
   /**
    * Lưu liên kết chatId Zalo vào NotificationSetting.
+   * Đảm bảo quan hệ 1-1: Tự động gỡ liên kết chatId này khỏi bất kỳ tài khoản nào khác trước khi gán mới.
    */
   async upsertNotificationSettingLink(
     userId: string,
     chatId: string,
     channels: NotificationChannel[],
   ) {
-    return prisma.notificationSetting.upsert({
-      where: { userId },
-      create: {
-        userId,
-        zaloBotChatId: chatId,
-        channels,
-      },
-      update: {
-        zaloBotChatId: chatId,
-        channels,
-      },
+    return prisma.$transaction(async (tx) => {
+      const previousSettings = await tx.notificationSetting.findMany({
+        where: {
+          zaloBotChatId: chatId,
+          userId: { not: userId },
+        },
+      });
+
+      for (const setting of previousSettings) {
+        const filteredChannels = setting.channels.filter(
+          (c) => c !== NotificationChannel.ZALO,
+        );
+        await tx.notificationSetting.update({
+          where: { userId: setting.userId },
+          data: {
+            zaloBotChatId: null,
+            channels: filteredChannels.length > 0 ? filteredChannels : [NotificationChannel.IN_APP],
+          },
+        });
+      }
+
+      return tx.notificationSetting.upsert({
+        where: { userId },
+        create: {
+          userId,
+          zaloBotChatId: chatId,
+          channels,
+        },
+        update: {
+          zaloBotChatId: chatId,
+          channels,
+        },
+      });
     });
   }
 

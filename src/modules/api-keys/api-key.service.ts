@@ -8,6 +8,17 @@ export class ApiKeyService {
   private readonly repository = new ApiKeyRepository();
 
   async createApiKey(userId: string, data: CreateApiKeyDto): Promise<CreateApiKeyResponseDto> {
+    // Quota Enforcement: Limit active API keys per user to prevent table bloat and resource exhaustion
+    const MAX_API_KEYS_PER_USER = 10;
+    const activeCount = await this.repository.countActiveByUserId(userId);
+    if (activeCount >= MAX_API_KEYS_PER_USER) {
+      throw new AppError(
+        `Exceeded maximum allowed active API keys (${MAX_API_KEYS_PER_USER})`,
+        400,
+        ERROR_CODE.VALIDATION_ERROR,
+      );
+    }
+
     const { rawKey, keyPrefix, keyHash } = generateApiKey();
     const expiresAt = data.expiresAt ? new Date(data.expiresAt) : null;
 
