@@ -15,7 +15,16 @@ const app = express();
 
 app.set('trust proxy', envConfig.trustProxy);
 
-app.use(helmet({ contentSecurityPolicy: false }));
+// Gating Swagger docs: chỉ mở ở dev/staging hoặc khi cờ ENABLE_SWAGGER=true
+const isSwaggerEnabled =
+  envConfig.nodeEnv !== 'production' || process.env.ENABLE_SWAGGER === 'true';
+
+// Chỉ tắt Content-Security-Policy ở môi trường cần load giao diện Swagger UI
+app.use(
+  helmet({
+    contentSecurityPolicy: isSwaggerEnabled ? false : undefined,
+  }),
+);
 
 const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
@@ -48,7 +57,17 @@ app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(cookieParser());
 
-app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerOptions));
+if (isSwaggerEnabled) {
+  app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerOptions));
+} else {
+  app.use('/api/docs', (_req, res) => {
+    res.status(404).json({
+      success: false,
+      message: 'API documentation is disabled in production',
+      code: 'NOT_FOUND',
+    });
+  });
+}
 
 app.use('/api/v1', rateLimitMiddleware, maintenanceModeMiddleware, routes);
 

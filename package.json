@@ -87,5 +87,10 @@
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
+  },
+  "pnpm": {
+    "overrides": {
+      "proxy-addr": "^2.0.8"
+    }
   }
 }

@@ -12,8 +12,8 @@ const nullableText = (max: number) => z
 const actionUrlSchema = z
   .union([
     z.string().trim().max(500).refine(
-      (value) => value.startsWith('/') || /^https:\/\//i.test(value),
-      'actionUrl must be an app-relative path or HTTPS URL',
+      (value) => (value.startsWith('/') && !value.startsWith('//')) || /^https:\/\//i.test(value),
+      'actionUrl must be an app-relative path (not protocol-relative) or HTTPS URL',
     ),
     z.null(),
   ])
@@ -21,7 +21,7 @@ const actionUrlSchema = z
 
 export const reminderParamsSchema = z.object({
   id: z.string().uuid('Invalid reminder id'),
-});
+}).strict();
 
 export const findRemindersSchema = z.object({
   type: reminderTypeSchema.optional(),
@@ -33,7 +33,7 @@ export const findRemindersSchema = z.object({
   dueTo: dateSchema.optional(),
   page: z.coerce.number().int().positive().optional().default(1),
   limit: z.coerce.number().int().min(1).max(100).optional().default(20),
-}).refine(
+}).strict().refine(
   (data) => !data.dueFrom || !data.dueTo || data.dueTo >= data.dueFrom,
   { path: ['dueTo'], message: 'dueTo must be greater than or equal to dueFrom' },
 );
@@ -50,6 +50,7 @@ export const createReminderSchema = z
     actionUrl: actionUrlSchema.optional(),
     isActive: z.boolean().optional().default(true),
   })
+  .strict()
   .superRefine((data, context) => {
     if (data.endAt && data.endAt <= data.remindAt) {
       context.addIssue({
@@ -79,6 +80,7 @@ export const updateReminderSchema = z
     actionUrl: actionUrlSchema.optional(),
     isActive: z.boolean().optional(),
   })
+  .strict()
   .refine((data) => Object.keys(data).length > 0, {
     message: 'At least one field is required',
   });
@@ -93,5 +95,5 @@ export const updateDailyTransactionReminderSchema = z.object({
       return h >= 0 && h <= 23 && m >= 0 && m <= 59;
     }, 'time must be a valid HH:mm value')
     .optional(),
-});
+}).strict();
 
