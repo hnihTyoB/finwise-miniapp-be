@@ -46,12 +46,15 @@ export async function maintenanceModeMiddleware(
     return;
   }
 
+  const matchesPathPrefix = (target: string, prefix: string) =>
+    target === prefix || target.startsWith(prefix + '/');
+
   // 2. Check if the path is an admin path
   const isAdmin = ADMIN_PATH_PREFIXES.some(
     (prefix) =>
-      rawPath.startsWith(prefix) ||
-      fullPath.startsWith(prefix) ||
-      rawPath.startsWith(prefix.replace(/^\/api\/v1/, '')),
+      matchesPathPrefix(rawPath, prefix) ||
+      matchesPathPrefix(fullPath, prefix) ||
+      matchesPathPrefix(rawPath, prefix.replace(/^\/api\/v1/, '')),
   );
 
   if (isAdmin) {
@@ -75,34 +78,79 @@ export async function maintenanceModeMiddleware(
     let user = req.user;
     if (!user) {
       const authHeader = req.headers.authorization;
-      const cookieToken = req.cookies?.accessToken;
-      let token: string | undefined;
-      if (authHeader && authHeader.startsWith('Bearer ')) {
-        token = authHeader.substring(7);
-      } else if (cookieToken) {
-        token = cookieToken;
+      let rawApiKey: string | undefined;
+      const xApiKey = req.headers['x-api-key'];
+      if (typeof xApiKey === 'string' && xApiKey.trim()) {
+        rawApiKey = xApiKey.trim();
+      } else if (authHeader) {
+        if (authHeader.startsWith('Bearer fw_')) {
+          rawApiKey = authHeader.substring(7).trim();
+        } else if (authHeader.startsWith('ApiKey ')) {
+          rawApiKey = authHeader.substring(7).trim();
+        }
       }
-      if (token) {
+
+      if (rawApiKey) {
         try {
-          const payload = jwt.verify(token, envConfig.jwt.accessSecret) as {
-            id: string;
-            email?: string;
-            roleId?: string;
-            role?: string;
-          };
-          if (payload?.id) {
-            const permissions = await rbacService.getUserPermissions(payload.id);
-            user = {
-              id: payload.id,
-              email: payload.email || '',
-              roleId: payload.roleId || '',
-              role: payload.role || '',
-              permissions,
-            };
-            req.user = user;
+          const { hashApiKey } = await import('../common/helpers/crypto.helper');
+          const { prisma } = await import('../database/prisma.client');
+          const keyHash = hashApiKey(rawApiKey);
+          const apiKey = await prisma.apiKey.findUnique({
+            where: { keyHash },
+            include: { user: { include: { role: true } } },
+          });
+
+          if (apiKey && apiKey.status === 'ACTIVE' && apiKey.deletedAt === null && (!apiKey.expiresAt || apiKey.expiresAt > new Date())) {
+            if (apiKey.user && apiKey.user.isActive && apiKey.user.deletedAt === null) {
+              let permissions = await rbacService.getUserPermissions(apiKey.user.id);
+              if (apiKey.permissions && apiKey.permissions.length > 0) {
+                permissions = permissions.filter((p) => apiKey.permissions.includes(p));
+              }
+              user = {
+                id: apiKey.user.id,
+                email: apiKey.user.email || '',
+                role: apiKey.user.role.name as any,
+                permissions,
+                apiKeyId: apiKey.id,
+              };
+              req.user = user;
+            }
           }
         } catch {
-          // Invalid or expired token; proceed to maintenance check
+          // Proceed to maintenance check on error
+        }
+      }
+
+      if (!user) {
+        const cookieToken = req.cookies?.accessToken;
+        let token: string | undefined;
+        if (authHeader && authHeader.startsWith('Bearer ') && !authHeader.startsWith('Bearer fw_')) {
+          token = authHeader.substring(7);
+        } else if (cookieToken) {
+          token = cookieToken;
+        }
+        if (token) {
+          try {
+            const payload = jwt.verify(token, envConfig.jwt.accessSecret, { algorithms: ['HS256'] }) as {
+              id: string;
+              email?: string;
+              roleId?: string;
+              role?: string;
+            };
+            if (payload?.id) {
+              const permissions = await rbacService.getUserPermissions(payload.id);
+              user = {
+                id: payload.id,
+                email: payload.email || '',
+                roleId: payload.roleId || '',
+                role: payload.role || '',
+                permissions,
+              };
+              req.user = user;
+            }
+          } catch {
+            // Invalid or expired token; proceed to maintenance check
+          }
         }
       }
     }

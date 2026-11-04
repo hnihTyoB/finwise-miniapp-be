@@ -44,19 +44,20 @@ const scheduleFields = {
 
 export const recurringTransactionParamsSchema = z.object({
   id: z.string().uuid('Invalid recurring transaction id'),
-});
+}).strict();
 
 export const findRecurringTransactionsSchema = z.object({
   isActive: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
   page: z.coerce.number().int().positive().optional().default(1),
   limit: z.coerce.number().int().min(1).max(100).optional().default(20),
-});
+}).strict();
 
 export const createRecurringTransactionSchema = z
   .object({
     ...scheduleFields,
     isActive: z.boolean().optional().default(true),
   })
+  .strict()
   .refine((data) => !data.endDate || data.endDate >= data.anchorDate, {
     path: ['endDate'],
     message: 'endDate must be greater than or equal to anchorDate',
@@ -77,6 +78,7 @@ export const updateRecurringTransactionSchema = z
     missedRunPolicy: scheduleFields.missedRunPolicy.optional(),
     remindDaysBefore: scheduleFields.remindDaysBefore,
   })
+  .strict()
   .refine((data) => Object.keys(data).length > 0, {
     message: 'At least one field is required',
   });
@@ -84,12 +86,12 @@ export const updateRecurringTransactionSchema = z
 export const recurringTransactionPreviewSchema = z.object({
   count: z.coerce.number().int().min(1).max(24).optional().default(6),
   from: dateSchema.optional(),
-});
+}).strict();
 
 export const recurringTransactionHistorySchema = z.object({
   page: z.coerce.number().int().positive().optional().default(1),
   limit: z.coerce.number().int().min(1).max(100).optional().default(20),
-});
+}).strict();
 
 export const convertSubscriptionToRecurringTransactionSchema = z.object({
   merchantName: z.string().trim().min(1).max(100),
@@ -98,4 +100,4 @@ export const convertSubscriptionToRecurringTransactionSchema = z.object({
   amount: amountSchema,
   frequency: frequencySchema,
   nextExpectedAt: dateSchema,
-});
+}).strict();

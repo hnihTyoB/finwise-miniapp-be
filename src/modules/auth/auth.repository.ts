@@ -1,6 +1,11 @@
+import crypto from 'crypto';
 import { prisma } from '../../database/prisma.client';
 import { auditLogRepository } from '../audit-logs/audit-log.repository';
 import { CreateAuditLogDto } from '../audit-logs/audit-log.dto';
+
+function hashToken(rawToken: string): string {
+  return crypto.createHash('sha256').update(rawToken).digest('hex');
+}
 
 export class AuthRepository {
   findByEmail(email: string) {
@@ -18,10 +23,11 @@ export class AuthRepository {
   }
 
   async saveRefreshToken(userId: string, token: string, expiresAt: Date, userAgent?: string, ipAddress?: string) {
+    const hashedToken = hashToken(token);
     return prisma.refreshToken.create({
       data: {
         userId,
-        token,
+        token: hashedToken,
         expiresAt,
         userAgent,
         ipAddress,
@@ -30,14 +36,20 @@ export class AuthRepository {
   }
 
   async findRefreshToken(token: string) {
-    return prisma.refreshToken.findUnique({
-      where: { token },
+    const hashedToken = hashToken(token);
+    return prisma.refreshToken.findFirst({
+      where: {
+        OR: [{ token: hashedToken }, { token }],
+      },
     });
   }
 
   async deleteRefreshToken(token: string) {
+    const hashedToken = hashToken(token);
     return prisma.refreshToken.deleteMany({
-      where: { token },
+      where: {
+        OR: [{ token: hashedToken }, { token }],
+      },
     });
   }
 
@@ -51,9 +63,20 @@ export class AuthRepository {
       ipAddress?: string;
     }
   ) {
+    const oldHashed = hashToken(oldToken);
+    const newHashed = hashToken(newRecord.token);
     return prisma.$transaction(async (tx) => {
-      await tx.refreshToken.deleteMany({ where: { token: oldToken } });
-      return tx.refreshToken.create({ data: newRecord });
+      await tx.refreshToken.deleteMany({
+        where: {
+          OR: [{ token: oldHashed }, { token: oldToken }],
+        },
+      });
+      return tx.refreshToken.create({
+        data: {
+          ...newRecord,
+          token: newHashed,
+        },
+      });
     });
   }
 
@@ -356,12 +379,14 @@ export class AuthRepository {
   }
 
   async deleteOtherSessions(userId: string, currentToken: string) {
+    const hashedToken = hashToken(currentToken);
     return prisma.refreshToken.deleteMany({
       where: {
         userId,
-        NOT: {
-          token: currentToken,
-        },
+        NOT: [
+          { token: hashedToken },
+          { token: currentToken },
+        ],
       },
     });
   }

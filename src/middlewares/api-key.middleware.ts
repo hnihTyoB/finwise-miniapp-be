@@ -28,8 +28,10 @@ export async function apiKeyMiddleware(
   if (!rawKey) {
     const authHeader = req.headers.authorization;
     if (authHeader) {
-      if (authHeader.startsWith('Bearer fw_') || authHeader.startsWith('ApiKey fw_')) {
-        rawKey = authHeader.split(' ')[1]?.trim();
+      if (authHeader.startsWith('Bearer fw_')) {
+        rawKey = authHeader.substring(7).trim();
+      } else if (authHeader.startsWith('ApiKey ')) {
+        rawKey = authHeader.substring(7).trim();
       }
     }
   }
@@ -103,17 +105,23 @@ export async function apiKeyMiddleware(
       apiKeyId: apiKey.id,
     };
 
-    // Update lastUsedAt asynchronously without blocking request
-    (async () => {
-      try {
-        await prisma.apiKey.update({
+    // SEC-W0-05: Update lastUsedAt with debouncing (max once per 5 minutes per key) to avoid DB connection exhaustion
+    const now = Date.now();
+    const LAST_USED_THROTTLE_MS = 300_000; // 5 minutes
+    const shouldUpdateLastUsed =
+      !apiKey.lastUsedAt ||
+      now - apiKey.lastUsedAt.getTime() > LAST_USED_THROTTLE_MS;
+
+    if (shouldUpdateLastUsed) {
+      Promise.resolve(
+        prisma.apiKey.update({
           where: { id: apiKey.id },
           data: { lastUsedAt: new Date() },
-        });
-      } catch (err) {
+        })
+      ).catch((err) => {
         console.error('Failed to update API key lastUsedAt:', err);
-      }
-    })();
+      });
+    }
 
     next();
   } catch (error) {

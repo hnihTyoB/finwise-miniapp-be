@@ -262,7 +262,7 @@ export const envConfig = {
   auditLogs: {
     retentionDays: (() => {
       const val = parseInt(process.env.AUDIT_LOG_RETENTION_DAYS || '30', 10);
-      return Number.isFinite(val) && val >= 1 ? val : 30;
+      return Number.isFinite(val) && val >= 30 ? val : 30;
     })(),
     archiveDir: process.env.AUDIT_LOG_ARCHIVE_DIR || 'storage/archives/audit-logs',
     cleanupIntervalMs: (() => {

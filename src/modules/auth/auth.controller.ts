@@ -287,8 +287,7 @@ export class AuthController {
       const currentToken =
         req.cookies?.refreshToken ||
         req.body?.refreshToken ||
-        (req.headers['x-refresh-token'] as string | undefined) ||
-        (req.query?.refreshToken as string | undefined);
+        (req.headers['x-refresh-token'] as string | undefined);
       const query = req.query as unknown as SessionQueryDto;
       const result = await this.service.getActiveSessions(req.user.id, currentToken, query);
       res.json({
@@ -319,8 +318,7 @@ export class AuthController {
       const currentToken =
         req.cookies?.refreshToken ||
         req.body?.refreshToken ||
-        (req.headers['x-refresh-token'] as string | undefined) ||
-        (req.query?.refreshToken as string | undefined);
+        (req.headers['x-refresh-token'] as string | undefined);
       if (!currentToken) {
         throw new AppError('Current session token is required', 400, ERROR_CODE.TOKEN_INVALID);
       }

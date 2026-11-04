@@ -11,6 +11,7 @@ import { MailService } from '../../common/services/mail.service';
 import { generateDeviceHash, parseUserAgent } from '../../common/helpers/user-agent.helper';
 import { rbacService } from '../rbac/rbac.service';
 import { SYSTEM_ROLES } from '../../common/constants';
+import { envConfig } from '../../config/env.config';
 
 import { UploadService } from '../uploads/upload.service';
 
@@ -452,8 +453,19 @@ export class AuthService {
       return this.getMe(userId);
     }
 
+    // SEC-W3-01: Validate that if avatarUrl points to Cloudflare R2 storage, it strictly belongs to userId
+    if (data.avatarUrl) {
+      const config = envConfig.r2;
+      if (config.publicBaseUrl && data.avatarUrl.startsWith(config.publicBaseUrl)) {
+        const expectedPrefix = `${config.publicBaseUrl}/avatars/${userId}/`;
+        if (!data.avatarUrl.startsWith(expectedPrefix)) {
+          throw new AppError('Avatar URL must belong to the authenticated user', 403, ERROR_CODE.FORBIDDEN);
+        }
+      }
+    }
+
     if (user.avatarUrl && user.avatarUrl !== data.avatarUrl) {
-      await this.uploadService.deleteFileByUrl(user.avatarUrl);
+      await this.uploadService.deleteFileByUrl(user.avatarUrl, userId);
     }
 
     const avatarData = data.avatarUrl === null
@@ -576,7 +588,7 @@ export class AuthService {
       deviceName: parseUserAgent(session.userAgent || undefined),
       ipAddress: session.ipAddress || 'Không rõ',
       createdAt: session.createdAt,
-      isCurrent: currentToken ? session.token === currentToken : false,
+      isCurrent: currentToken ? (session.token === currentToken || session.token === hashToken(currentToken)) : false,
     }));
 
     return {
@@ -607,8 +619,8 @@ export class AuthService {
       ? crypto.createHmac('sha256', appSecret).update(accessToken).digest('hex')
       : '';
 
-    // 1. Xác thực access_token và lấy thông tin Zalo profile (có fallback khi IP server ở nước ngoài)
-    let zaloId = dto.zaloId || '';
+    // 1. Xác thực access_token và lấy thông tin Zalo profile
+    let zaloId = '';
     let zaloName = dto.name || 'Người dùng Zalo';
     let zaloAvatarUrl: string | null = dto.avatar || null;
 
@@ -630,7 +642,11 @@ export class AuthService {
         if (zaloProfile.name) zaloName = zaloProfile.name;
         if (zaloProfile.picture?.data?.url) zaloAvatarUrl = zaloProfile.picture.data.url;
       } else if (zaloProfile?.error === -501) {
-        console.warn('[ZaloAuth] Server IP is outside Vietnam (-501). Using client profile info.');
+        throw new AppError(
+          'Zalo API authentication unavailable from foreign server IP',
+          502,
+          ERROR_CODE.INVALID_CREDENTIALS,
+        );
       } else if (zaloProfile && zaloProfile.error !== undefined && zaloProfile.error !== 0) {
         console.error('[ZaloAuth] fetchZaloProfile failed:', zaloProfile);
         throw new AppError(
@@ -642,6 +658,11 @@ export class AuthService {
     } catch (err) {
       if (err instanceof AppError) throw err;
       console.warn('[ZaloAuth] fetchZaloProfile caught error:', err);
+      throw new AppError(
+        'Failed to verify Zalo credentials with identity provider',
+        401,
+        ERROR_CODE.INVALID_CREDENTIALS,
+      );
     }
 
     // 2. Lấy và chuẩn hóa số điện thoại (từ phoneToken hoặc phoneNumber nếu có thể giải mã)
@@ -918,7 +939,7 @@ export class AuthService {
     }
 
     // Xác thực accessToken và lấy Zalo ID từ graph.zalo.me
-    let zaloId = dto.zaloId || '';
+    let zaloId = '';
     let zaloName = dto.name || '';
     let zaloAvatarUrl = dto.avatar || null;
 
@@ -930,7 +951,11 @@ export class AuthService {
         if (zaloProfile.name) zaloName = zaloProfile.name;
         if (zaloProfile.picture?.data?.url) zaloAvatarUrl = zaloProfile.picture.data.url;
       } else if (zaloProfile?.error === -501) {
-        console.warn('[ZaloLink] Server IP is outside Vietnam (-501). Using client zaloId as fallback.');
+        throw new AppError(
+          'Zalo API authentication unavailable from foreign server IP',
+          502,
+          ERROR_CODE.INVALID_CREDENTIALS,
+        );
       } else if (zaloProfile && zaloProfile.error !== undefined && zaloProfile.error !== 0) {
         throw new AppError(
           zaloProfile?.message ? `Zalo Profile Error: ${zaloProfile.message}` : 'Invalid Zalo access token',
@@ -941,12 +966,19 @@ export class AuthService {
     } catch (err) {
       if (err instanceof AppError) throw err;
       console.warn('[ZaloLink] fetchZaloProfile caught error:', err);
+      throw new AppError(
+        'Failed to verify Zalo account with Zalo server',
+        401,
+        ERROR_CODE.INVALID_CREDENTIALS,
+      );
     }
 
     if (!zaloId) {
-      // Fallback: hash accessToken làm định danh khi IP server bị giới hạn
-      const accHash = crypto.createHash('sha256').update(accessToken).digest('hex').substring(0, 16);
-      zaloId = `zalo_acc_${accHash}`;
+      throw new AppError(
+        'Không thể xác thực mã định danh Zalo từ máy chủ Zalo',
+        401,
+        ERROR_CODE.INVALID_CREDENTIALS,
+      );
     }
 
     // Kiểm tra Zalo ID này đã được liên kết với tài khoản khác chưa

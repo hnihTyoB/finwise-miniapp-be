@@ -22,7 +22,7 @@ const commonFilterSchema = {
 
 export const categoryParamsSchema = z.object({
   id: z.string().uuid('Invalid category id'),
-});
+}).strict();
 
 export const findCategoriesSchema = z.object({
   ...commonFilterSchema,
@@ -34,9 +34,9 @@ export const findCategoriesSchema = z.object({
   order: z.enum(['asc', 'desc']).optional().default('desc'),
   page: z.coerce.number().int().positive().optional().default(1),
   limit: z.coerce.number().int().min(1).max(100).optional().default(20),
-});
+}).strict();
 
-export const categoryTreeSchema = z.object(commonFilterSchema);
+export const categoryTreeSchema = z.object(commonFilterSchema).strict();
 
 export const createCategorySchema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(100),
@@ -44,7 +44,7 @@ export const createCategorySchema = z.object({
   parentId: z.string().uuid('Invalid parent category id').nullable().optional(),
   icon: nullableIconSchema.optional(),
   color: nullableColorSchema.optional(),
-});
+}).strict();
 
 export const updateCategorySchema = z
   .object({
@@ -54,6 +54,7 @@ export const updateCategorySchema = z
     icon: nullableIconSchema.optional(),
     color: nullableColorSchema.optional(),
   })
+  .strict()
   .refine((data) => Object.keys(data).length > 0, {
     message: 'At least one field is required',
   });

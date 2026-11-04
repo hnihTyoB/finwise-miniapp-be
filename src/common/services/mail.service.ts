@@ -184,21 +184,21 @@ export class MailService {
     };
 
     if (!mailConfig.isConfigured) {
-      console.warn('-------- EMAIL VERIFICATION TOKEN (DEV MODE) --------');
-      console.warn(`To: ${email}`);
-      console.warn(`Link: ${verificationUrl}`);
-      console.warn('----------------------------------------------------');
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('-------- EMAIL VERIFICATION TOKEN (DEV MODE) --------');
+        console.warn(`To: ${email}`);
+        console.warn(`Link: ${verificationUrl}`);
+        console.warn('----------------------------------------------------');
+      } else {
+        console.warn(`[MailService] Mail provider not configured in production. Cannot send verification email to ${email}`);
+      }
       return;
     }
 
     try {
       await this.dispatchEmail(mailOptions);
     } catch (error) {
-      console.error('[MailService] Failed to send verification email:', error);
-      console.warn('-------- VERIFICATION LINK FALLBACK (LOG) --------');
-      console.warn(`To: ${email}`);
-      console.warn(`Link: ${verificationUrl}`);
-      console.warn('--------------------------------------------------');
+      console.error(`[MailService] Failed to send verification email to: ${email}`);
       throw error;
     }
   }
@@ -228,21 +228,21 @@ export class MailService {
     };
 
     if (!mailConfig.isConfigured) {
-      console.warn('-------- EMAIL PASSWORD RESET TOKEN (DEV MODE) --------');
-      console.warn(`To: ${email}`);
-      console.warn(`Link: ${resetUrl}`);
-      console.warn('-------------------------------------------------------');
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('-------- EMAIL PASSWORD RESET TOKEN (DEV MODE) --------');
+        console.warn(`To: ${email}`);
+        console.warn(`Link: ${resetUrl}`);
+        console.warn('-------------------------------------------------------');
+      } else {
+        console.warn(`[MailService] Mail provider not configured in production. Cannot send password reset to ${email}`);
+      }
       return;
     }
 
     try {
       await this.dispatchEmail(mailOptions);
     } catch (error) {
-      console.error('[MailService] Failed to send password reset email:', error);
-      console.warn('-------- PASSWORD RESET LINK FALLBACK (LOG) --------');
-      console.warn(`To: ${email}`);
-      console.warn(`Link: ${resetUrl}`);
-      console.warn('----------------------------------------------------');
+      console.error(`[MailService] Failed to send password reset email to: ${email}`);
       throw error;
     }
   }
@@ -415,12 +415,16 @@ export class MailService {
     };
 
     if (!mailConfig.isConfigured) {
-      console.warn('-------- HANDOVER OTP EMAIL (DEV MODE) --------');
-      console.warn(`To: ${email}`);
-      console.warn(`Target User: ${details.targetUserName}`);
-      console.warn(`OTP Code: ${otp}`);
-      console.warn(`Expires In: ${formattedMinutes} minutes`);
-      console.warn('-----------------------------------------------');
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('-------- HANDOVER OTP EMAIL (DEV MODE) --------');
+        console.warn(`To: ${email}`);
+        console.warn(`Target User: ${details.targetUserName}`);
+        console.warn(`OTP Code: ${otp}`);
+        console.warn(`Expires In: ${formattedMinutes} minutes`);
+        console.warn('-----------------------------------------------');
+      } else {
+        console.warn(`[MailService] Mail provider not configured in production. Cannot send handover OTP to ${email}`);
+      }
       return;
     }
 
@@ -429,10 +433,7 @@ export class MailService {
       await this.dispatchEmail(mailOptions);
       console.log(`[MailService] Handover OTP email successfully dispatched to: ${email}`);
     } catch (error) {
-      console.error('[MailService] Failed to send handover OTP email:', error);
-      console.warn('-------- HANDOVER OTP FALLBACK LOG --------');
-      console.warn(`To: ${email} | OTP: ${otp}`);
-      console.warn('-------------------------------------------');
+      console.error(`[MailService] Failed to send handover OTP email to: ${email}`);
     }
   }
 }

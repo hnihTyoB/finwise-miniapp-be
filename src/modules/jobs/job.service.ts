@@ -9,6 +9,16 @@ export class JobService {
   private readonly repository = new JobRepository();
 
   async createJob(userId: string, data: CreateAsyncJobDto): Promise<AsyncJobResponseDto> {
+    const MAX_ACTIVE_JOBS_PER_USER = 3;
+    const activeCount = await this.repository.countActiveJobs(userId);
+    if (activeCount >= MAX_ACTIVE_JOBS_PER_USER) {
+      throw new AppError(
+        `Bạn đang có ${activeCount} tác vụ đang chạy. Giới hạn tối đa là ${MAX_ACTIVE_JOBS_PER_USER} tác vụ đồng thời.`,
+        429,
+        ERROR_CODE.RATE_LIMIT_EXCEEDED,
+      );
+    }
+
     const job = await this.repository.create({
       userId,
       type: data.type,

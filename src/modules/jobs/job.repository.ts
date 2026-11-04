@@ -37,6 +37,15 @@ export class JobRepository {
     });
   }
 
+  async countActiveJobs(userId: string): Promise<number> {
+    return prisma.asyncJob.count({
+      where: {
+        userId,
+        status: { in: [AsyncJobStatus.PENDING, AsyncJobStatus.PROCESSING] },
+      },
+    });
+  }
+
   async updateStatus(
     id: string,
     status: AsyncJobStatus,

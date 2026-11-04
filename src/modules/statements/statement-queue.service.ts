@@ -136,13 +136,50 @@ export class StatementQueueService {
   // ─── Core export processing ────────────────────────────────────────────────
 
   private async processExportJob(payload: StatementJobPayload): Promise<void> {
+    if (!payload || typeof payload !== 'object' || !payload.statementJobId || !payload.userId) {
+      console.warn('[StatementQueue] Dropping malformed or poisoned job payload:', payload);
+      return;
+    }
+
     const { statementJobId, userId, walletId, format, password, verificationCode } = payload;
     const dateFrom = new Date(payload.dateFrom);
     const dateTo = new Date(payload.dateTo);
 
-    await this.stmtRepo.updateStatus(statementJobId, StatementJobStatus.PROCESSING, {
-      startedAt: new Date(),
-    });
+    if (isNaN(dateFrom.getTime()) || isNaN(dateTo.getTime()) || dateFrom > dateTo) {
+      console.warn(`[StatementQueue] Invalid date range in export job ${statementJobId}: dateFrom=${payload.dateFrom}, dateTo=${payload.dateTo}`);
+      try {
+        await this.stmtRepo.updateStatus(statementJobId, StatementJobStatus.FAILED, {
+          error: 'Khoảng thời gian sao kê không hợp lệ',
+          completedAt: new Date(),
+        });
+      } catch {}
+      return;
+    }
+
+    const validFormats: StatementExportFormat[] = [
+      StatementExportFormat.XLSX,
+      StatementExportFormat.PDF,
+      StatementExportFormat.CSV,
+    ];
+    if (!validFormats.includes(format)) {
+      console.warn(`[StatementQueue] Unsupported format in export job ${statementJobId}: ${format}`);
+      try {
+        await this.stmtRepo.updateStatus(statementJobId, StatementJobStatus.FAILED, {
+          error: `Định dạng xuất không được hỗ trợ: ${format}`,
+          completedAt: new Date(),
+        });
+      } catch {}
+      return;
+    }
+
+    try {
+      await this.stmtRepo.updateStatus(statementJobId, StatementJobStatus.PROCESSING, {
+        startedAt: new Date(),
+      });
+    } catch (statusErr: any) {
+      console.error(`[StatementQueue] Failed to mark job ${statementJobId} as PROCESSING (record may not exist):`, statusErr?.message);
+      return;
+    }
 
     try {
       // ── Fetch user + wallet info ────────────────────────────────────────
@@ -340,10 +377,12 @@ export class StatementQueueService {
         });
       }
     } catch (err: any) {
-      await this.stmtRepo.updateStatus(statementJobId, StatementJobStatus.FAILED, {
-        error: err?.message ?? 'Unknown export error',
-        completedAt: new Date(),
-      });
+      try {
+        await this.stmtRepo.updateStatus(statementJobId, StatementJobStatus.FAILED, {
+          error: err?.message ?? 'Unknown export error',
+          completedAt: new Date(),
+        });
+      } catch {}
       throw err;
     }
   }

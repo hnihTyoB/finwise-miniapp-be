@@ -70,12 +70,12 @@ export class BackupRepository {
   }
 
   /**
-   * Lấy danh sách ví đang hoạt động của người dùng
+   * Lấy danh sách ví đang hoạt động của người dùng (chỉ lấy ví chuẩn STANDARD, loại trừ sổ tiết kiệm SAVINGS_ACCOUNT)
    */
   async getUserActiveWallets(userId: string, tx?: RepositoryTransaction) {
     const client = tx || prisma;
     return client.wallet.findMany({
-      where: { userId, isArchived: false },
+      where: { userId, isArchived: false, type: 'STANDARD' },
       select: {
         id: true,
         name: true,

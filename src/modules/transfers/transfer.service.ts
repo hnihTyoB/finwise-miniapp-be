@@ -114,6 +114,14 @@ export class TransferService {
         );
       }
 
+      if (destinationWallet.type === 'SAVINGS_ACCOUNT') {
+        throw new AppError(
+          'Sổ tiết kiệm đang bị khóa kỳ hạn. Không thể đảo ngược lệnh chuyển tiền để rút tiền trực tiếp từ sổ.',
+          409,
+          ERROR_CODE.WALLET_SAVINGS_LOCKED,
+        );
+      }
+
       const amount = new Prisma.Decimal(current.amount);
 
       if (destinationWallet.balance.lessThan(amount)) {

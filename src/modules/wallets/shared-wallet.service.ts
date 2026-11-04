@@ -275,8 +275,9 @@ export class SharedWalletService {
     // Determine current month range in UTC+7
     const today = todayInBusinessTime();
     const [year, month] = today.split('-').map(Number);
+    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
     const startOfMonth = businessDateToPrismaDate(`${year}-${String(month).padStart(2, '0')}-01`);
-    const endOfMonth = businessDateToPrismaDate(today);
+    const endOfMonth = businessDateToPrismaDate(`${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`);
 
     const members = await this.repository.findMembers(walletId);
     const results: WalletMemberResponseDto[] = [];
@@ -362,8 +363,9 @@ export class SharedWalletService {
 
     const today = todayInBusinessTime();
     const [year, month] = today.split('-').map(Number);
+    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
     const startOfMonth = businessDateToPrismaDate(`${year}-${String(month).padStart(2, '0')}-01`);
-    const endOfMonth = businessDateToPrismaDate(today);
+    const endOfMonth = businessDateToPrismaDate(`${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`);
 
     const spent = await this.repository.getMemberSpentInDateRange(
       walletId,
@@ -603,8 +605,15 @@ export class SharedWalletService {
     };
   }
 
-  async assertCanCreateTransaction(userId: string, walletId: string, amount: Prisma.Decimal, type: string) {
-    const userRole = await this.repository.findUserWalletRole(walletId, userId);
+  async assertCanCreateTransaction(
+    userId: string,
+    walletId: string,
+    amount: Prisma.Decimal,
+    type: string,
+    transactionDate?: string,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const userRole = await this.repository.findUserWalletRole(walletId, userId, tx);
     if (!userRole) {
       throw new AppError('Bạn không có quyền thao tác trên ví này', 403, ERROR_CODE.FORBIDDEN);
     }
@@ -615,18 +624,20 @@ export class SharedWalletService {
 
     // Check spending quota if EXPENSE
     if (type === 'EXPENSE' && userRole === WalletMemberRole.MEMBER) {
-      const member = await this.repository.findMember(walletId, userId);
+      const member = await this.repository.findMember(walletId, userId, tx);
       if (member?.monthlySpendingLimit) {
-        const today = todayInBusinessTime();
-        const [year, month] = today.split('-').map(Number);
+        const refDate = transactionDate || todayInBusinessTime();
+        const [year, month] = refDate.split('-').map(Number);
+        const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
         const startOfMonth = businessDateToPrismaDate(`${year}-${String(month).padStart(2, '0')}-01`);
-        const endOfMonth = businessDateToPrismaDate(today);
+        const endOfMonth = businessDateToPrismaDate(`${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`);
 
         const currentSpent = await this.repository.getMemberSpentInDateRange(
           walletId,
           userId,
           startOfMonth,
           endOfMonth,
+          tx,
         );
 
         const projectedSpent = currentSpent.plus(amount);
@@ -649,8 +660,10 @@ export class SharedWalletService {
     currentType: string,
     nextAmount: Prisma.Decimal,
     nextType: string,
+    transactionDate?: string,
+    tx?: Prisma.TransactionClient,
   ) {
-    const nextWalletRole = await this.repository.findUserWalletRole(nextWalletId, userId);
+    const nextWalletRole = await this.repository.findUserWalletRole(nextWalletId, userId, tx);
     if (!nextWalletRole) {
       throw new AppError('Bạn không có quyền thao tác trên ví đích', 403, ERROR_CODE.FORBIDDEN);
     }
@@ -660,25 +673,27 @@ export class SharedWalletService {
     }
 
     if (currentWalletId !== nextWalletId) {
-      const currentRole = await this.repository.findUserWalletRole(currentWalletId, userId);
+      const currentRole = await this.repository.findUserWalletRole(currentWalletId, userId, tx);
       if (currentRole === WalletMemberRole.VIEWER) {
         throw new AppError('Tài khoản chỉ có quyền xem, không được phép chỉnh sửa giao dịch trong ví này', 403, ERROR_CODE.WALLET_READ_ONLY);
       }
     }
 
     if (nextType === 'EXPENSE' && nextWalletRole === WalletMemberRole.MEMBER) {
-      const member = await this.repository.findMember(nextWalletId, userId);
+      const member = await this.repository.findMember(nextWalletId, userId, tx);
       if (member?.monthlySpendingLimit) {
-        const today = todayInBusinessTime();
-        const [year, month] = today.split('-').map(Number);
+        const refDate = transactionDate || todayInBusinessTime();
+        const [year, month] = refDate.split('-').map(Number);
+        const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
         const startOfMonth = businessDateToPrismaDate(`${year}-${String(month).padStart(2, '0')}-01`);
-        const endOfMonth = businessDateToPrismaDate(today);
+        const endOfMonth = businessDateToPrismaDate(`${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`);
 
         const currentSpent = await this.repository.getMemberSpentInDateRange(
           nextWalletId,
           userId,
           startOfMonth,
           endOfMonth,
+          tx,
         );
 
         const netDelta = (currentWalletId === nextWalletId && currentType === 'EXPENSE')
@@ -696,6 +711,17 @@ export class SharedWalletService {
           }
         }
       }
+    }
+  }
+
+  async assertCanDeleteTransaction(userId: string, walletId: string, tx?: Prisma.TransactionClient) {
+    const userRole = await this.repository.findUserWalletRole(walletId, userId, tx);
+    if (!userRole) {
+      throw new AppError('Bạn không có quyền thao tác trên ví này', 403, ERROR_CODE.FORBIDDEN);
+    }
+
+    if (userRole === WalletMemberRole.VIEWER) {
+      throw new AppError('Tài khoản chỉ có quyền xem, không được phép xóa giao dịch trong ví này', 403, ERROR_CODE.WALLET_READ_ONLY);
     }
   }
 

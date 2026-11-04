@@ -268,6 +268,22 @@ export class WalletRepository {
 
   async restore(userId: string, id: string) {
     const wallet = await runSerializableTransaction(async (transaction) => {
+      const targetWallet = await transaction.wallet.findFirst({
+        where: { id, userId },
+        select: { id: true, isArchived: true },
+      });
+
+      if (!targetWallet) {
+        return null;
+      }
+
+      if (!targetWallet.isArchived) {
+        return transaction.wallet.findUnique({
+          where: { id },
+          select: walletSelect,
+        });
+      }
+
       const defaultWallet = await transaction.wallet.findFirst({
         where: { userId, isDefault: true, isArchived: false },
         select: { id: true },
@@ -283,6 +299,6 @@ export class WalletRepository {
       });
     });
 
-    return toWalletResponse(wallet);
+    return wallet ? toWalletResponse(wallet, userId) : null;
   }
 }

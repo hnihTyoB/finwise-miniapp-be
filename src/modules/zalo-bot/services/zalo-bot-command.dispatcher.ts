@@ -109,9 +109,14 @@ export class ZaloBotCommandDispatcher {
     const result = await zaloBotLinkService.verifyAndConsumeLinkCode(code, chatId, senderName);
 
     if (!result.success) {
-      const errorMsg =
+      let errorMsg =
         '❌ **Mã liên kết không hợp lệ hoặc đã hết hạn!**\n\n' +
         '👉 Hãy mở **FinWise Mini App** → vào **Cài đặt thông báo** → bấm **"Kết Nối Zalo Bot"** để lấy mã mới nhé.';
+      if (result.reason === 'TOO_MANY_FAILED_ATTEMPTS') {
+        errorMsg =
+          '⚠️ **Bạn đã nhập sai mã liên kết quá 5 lần.**\n\n' +
+          'Vui lòng thử lại sau 15 phút để bảo đảm an toàn tài khoản.';
+      }
       await zaloBotService.sendMessage(chatId, errorMsg);
       return;
     }

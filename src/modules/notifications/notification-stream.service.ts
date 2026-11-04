@@ -10,6 +10,8 @@ interface SsePayload {
   data: any;
 }
 
+export const MAX_SSE_CONNECTIONS_PER_USER = 5;
+
 export class NotificationStreamService {
   private readonly logger = new LoggerService('NotificationStreamService');
   private readonly repository = new NotificationRepository();
@@ -125,6 +127,18 @@ export class NotificationStreamService {
   }
 
   async registerClient(userId: string, res: Response, req: Request): Promise<void> {
+    const existingClients = this.clients.get(userId);
+    if (existingClients && existingClients.size >= MAX_SSE_CONNECTIONS_PER_USER) {
+      this.logger.warn(
+        `Rejected SSE connection: user ${userId} exceeded max connections (${MAX_SSE_CONNECTIONS_PER_USER})`,
+      );
+      this.writeEvent(res, 'error', {
+        message: `Too many concurrent SSE connections. Maximum allowed is ${MAX_SSE_CONNECTIONS_PER_USER}.`,
+      });
+      res.end();
+      return;
+    }
+
     // Register response connection
     if (!this.clients.has(userId)) {
       this.clients.set(userId, new Set<Response>());

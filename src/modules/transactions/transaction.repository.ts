@@ -1,5 +1,7 @@
 import { Prisma, TransactionType } from '@prisma/client';
 import { prisma } from '../../database/prisma.client';
+import { AppError } from '../../common/errors/app-error';
+import { ERROR_CODE } from '../../common/errors/error-code';
 import {
   businessDateToPrismaDate,
   prismaDateToBusinessDate,
@@ -130,6 +132,7 @@ export class TransactionRepository {
     let scopeCondition: Prisma.TransactionWhereInput = {
       OR: [
         { userId },
+        { wallet: { userId } },
         { wallet: { members: { some: { userId, status: 'ACTIVE' } } } },
       ],
     };
@@ -351,12 +354,26 @@ export class TransactionRepository {
   ) {
     return this.runSerializable(async (transaction) => {
       const current = await transaction.transaction.findFirst({
-        where: { id, userId },
-        select: { id: true, receiptUrl: true },
+        where: {
+          id,
+          OR: [
+            { userId },
+            { wallet: { userId } },
+          ],
+        },
+        select: {
+          id: true,
+          receiptUrl: true,
+          wallet: { select: { isArchived: true } },
+        },
       });
 
       if (!current) {
         return null;
+      }
+
+      if (current.wallet.isArchived) {
+        throw new AppError('Archived wallet cannot be modified', 409, ERROR_CODE.WALLET_ARCHIVED);
       }
 
       const updated = await transaction.transaction.update({
@@ -389,7 +406,7 @@ export class TransactionRepository {
       ...(opts.walletId ? { walletId: opts.walletId } : {}),
       date: {
         gte: opts.dateFrom,
-        lt: opts.dateTo,
+        lte: opts.dateTo,
       },
       ...(opts.cursor
         ? {

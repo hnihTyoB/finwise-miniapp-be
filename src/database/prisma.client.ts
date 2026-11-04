@@ -33,9 +33,21 @@ export function createHyperdrivePrismaClient(
   });
 }
 
-// Connection-keyed cached client instances
+// Connection-keyed cached client instances with bounded maximum size to prevent Pool Exhaustion DoS
+const MAX_CLIENT_POOL_SIZE = 10;
 const clientPool = new Map<string, PrismaClient>();
 let defaultNodePrisma: PrismaClient | null = null;
+
+function evictOldestClientIfNeeded() {
+  if (clientPool.size >= MAX_CLIENT_POOL_SIZE) {
+    const oldestKey = clientPool.keys().next().value;
+    if (oldestKey) {
+      const oldClient = clientPool.get(oldestKey);
+      oldClient?.$disconnect().catch(() => {});
+      clientPool.delete(oldestKey);
+    }
+  }
+}
 
 export function setWorkerEnv(_env: WorkerEnv) {
   // Retained for backward-compatibility without global state mutation
@@ -57,6 +69,7 @@ export function getPrismaClient(env?: WorkerEnv): PrismaClient {
     const key = env.HYPERDRIVE.connectionString;
     let client = clientPool.get(key);
     if (!client) {
+      evictOldestClientIfNeeded();
       client = createHyperdrivePrismaClient(env.HYPERDRIVE);
       clientPool.set(key, client);
     }
@@ -70,6 +83,7 @@ export function getPrismaClient(env?: WorkerEnv): PrismaClient {
       '';
     let client = clientPool.get(connStr);
     if (!client) {
+      evictOldestClientIfNeeded();
       client = createHyperdrivePrismaClient(connStr);
       clientPool.set(connStr, client);
     }
@@ -87,6 +101,20 @@ export function getPrismaClient(env?: WorkerEnv): PrismaClient {
     }
   }
   return defaultNodePrisma;
+}
+
+/**
+ * Đóng an toàn toàn bộ các kết nối Prisma và Pool khi ứng dụng shutdown (Graceful Shutdown)
+ */
+export async function disconnectAllPrismaClients(): Promise<void> {
+  if (defaultNodePrisma) {
+    await defaultNodePrisma.$disconnect().catch(() => {});
+    defaultNodePrisma = null;
+  }
+  for (const client of clientPool.values()) {
+    await client.$disconnect().catch(() => {});
+  }
+  clientPool.clear();
 }
 
 /**

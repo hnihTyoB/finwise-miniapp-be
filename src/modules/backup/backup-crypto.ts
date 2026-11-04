@@ -14,6 +14,8 @@ export interface EncryptionResult {
 
 export class BackupCryptoService {
   private static readonly PBKDF2_ITERATIONS = 100000;
+  private static readonly MAX_PBKDF2_ITERATIONS = 600000;
+  private static readonly MIN_PBKDF2_ITERATIONS = 1000;
   private static readonly KEY_LENGTH = 32;
   private static readonly SALT_LENGTH = 16;
   private static readonly IV_LENGTH = 12; // 96-bit IV recommended for GCM
@@ -102,6 +104,13 @@ export class BackupCryptoService {
       const tag = Buffer.from(params.tag, 'hex');
       const ciphertext = Buffer.from(ciphertextHex, 'hex');
       const iterations = params.iterations || this.PBKDF2_ITERATIONS;
+      if (iterations > this.MAX_PBKDF2_ITERATIONS || iterations < this.MIN_PBKDF2_ITERATIONS) {
+        throw new AppError(
+          `Số vòng lặp PBKDF2 (${iterations}) không hợp lệ hoặc vượt ngưỡng an toàn cho phép [${this.MIN_PBKDF2_ITERATIONS} - ${this.MAX_PBKDF2_ITERATIONS}]`,
+          422,
+          ERROR_CODE.VALIDATION_ERROR,
+        );
+      }
 
       const key = crypto.pbkdf2Sync(
         password,
@@ -116,7 +125,10 @@ export class BackupCryptoService {
 
       const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
       return decrypted.toString('utf8');
-    } catch {
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
       throw new AppError(
         'Mật khẩu giải mã không chính xác hoặc tệp tin bị hỏng',
         400,

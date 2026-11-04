@@ -12,7 +12,12 @@ export function buildCsvBuffer(
   const BOM = '\uFEFF';
 
   const escapeCell = (val: string | null | undefined): string => {
-    const s = val ?? '';
+    let s = val ?? '';
+    // SEC-W3-04: Prevent CSV / Spreadsheet Formula Injection (CWE-1236)
+    // Prepend a single quote (') if cell begins with =, +, -, @, \t, or \r
+    if (s.length > 0 && /^[=+\-@\t\r]/.test(s)) {
+      s = `'${s}`;
+    }
     if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
       return `"${s.replace(/"/g, '""')}"`;
     }

@@ -1,16 +1,26 @@
 import { NextFunction, Request, Response } from 'express';
+import { AppError } from '../../common/errors/app-error';
+import { ERROR_CODE } from '../../common/errors/error-code';
 import {
   NotificationQueryDto,
   UpdateNotificationSettingDto,
 } from './notification.dto';
 import { NotificationService } from './notification.service';
-import { notificationStreamService } from './notification-stream.service';
+import { notificationStreamService, MAX_SSE_CONNECTIONS_PER_USER } from './notification-stream.service';
 
 export class NotificationController {
   private readonly service = new NotificationService();
 
   stream = async (req: Request, res: Response, next: NextFunction) => {
     try {
+      if (notificationStreamService.getActiveConnectionCount(req.user.id) >= MAX_SSE_CONNECTIONS_PER_USER) {
+        throw new AppError(
+          `Quá nhiều kết nối SSE đồng thời. Giới hạn tối đa là ${MAX_SSE_CONNECTIONS_PER_USER} kết nối.`,
+          429,
+          ERROR_CODE.RATE_LIMIT_EXCEEDED,
+        );
+      }
+
       res.writeHead(200, {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache, no-transform',

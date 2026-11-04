@@ -31,8 +31,9 @@ export class SharedWalletRepository {
     });
   }
 
-  async findUserWalletRole(walletId: string, userId: string): Promise<WalletMemberRole | null> {
-    const wallet = await prisma.wallet.findUnique({
+  async findUserWalletRole(walletId: string, userId: string, tx?: Prisma.TransactionClient): Promise<WalletMemberRole | null> {
+    const client = tx ?? prisma;
+    const wallet = await client.wallet.findUnique({
       where: { id: walletId },
       select: { userId: true },
     });
@@ -40,7 +41,7 @@ export class SharedWalletRepository {
     if (!wallet) return null;
     if (wallet.userId === userId) return WalletMemberRole.OWNER;
 
-    const membership = await prisma.walletMember.findUnique({
+    const membership = await client.walletMember.findUnique({
       where: {
         walletId_userId: {
           walletId,
@@ -137,8 +138,9 @@ export class SharedWalletRepository {
     });
   }
 
-  findMember(walletId: string, userId: string) {
-    return prisma.walletMember.findUnique({
+  findMember(walletId: string, userId: string, tx?: Prisma.TransactionClient) {
+    const client = tx ?? prisma;
+    return client.walletMember.findUnique({
       where: {
         walletId_userId: {
           walletId,
@@ -291,8 +293,10 @@ export class SharedWalletRepository {
     userId: string,
     fromDate: Date,
     toDate: Date,
+    tx?: Prisma.TransactionClient,
   ): Promise<Prisma.Decimal> {
-    const aggregate = await prisma.transaction.aggregate({
+    const client = tx ?? prisma;
+    const aggregate = await client.transaction.aggregate({
       where: {
         walletId,
         userId,

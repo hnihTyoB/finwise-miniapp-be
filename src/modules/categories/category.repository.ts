@@ -176,9 +176,23 @@ export class CategoryRepository {
   }
 
   update(id: string, data: UpdateCategoryDto) {
+    const updateData: {
+      name?: string;
+      type?: any;
+      parentId?: string | null;
+      icon?: string | null;
+      color?: string | null;
+    } = {};
+
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.type !== undefined) updateData.type = data.type;
+    if (data.parentId !== undefined) updateData.parentId = data.parentId;
+    if (data.icon !== undefined) updateData.icon = data.icon;
+    if (data.color !== undefined) updateData.color = data.color;
+
     return prisma.category.update({
       where: { id },
-      data,
+      data: updateData,
       select: categorySelect,
     });
   }

@@ -27,9 +27,10 @@ export function errorMiddleware(
   }
 
   if (error instanceof ZodError) {
+    const firstMessage = error.errors[0]?.message;
     res.status(422).json({
       success: false,
-      message: 'Validation failed',
+      message: firstMessage ? `Validation failed: ${firstMessage}` : 'Validation failed',
       code: ERROR_CODE.VALIDATION_ERROR,
       errors: error.errors.map((e) => ({
         field: e.path.join('.'),
@@ -46,6 +47,29 @@ export function errorMiddleware(
       success: false,
       message: 'Payload too large',
       code: 'PAYLOAD_TOO_LARGE',
+    });
+    return;
+  }
+
+  // Handle BodyParser entity.parse.failed / 400 Bad Request (Malformed JSON syntax)
+  if (
+    anyError.type === 'entity.parse.failed' ||
+    (error instanceof SyntaxError && 'body' in error && (anyError.status === 400 || anyError.statusCode === 400))
+  ) {
+    res.status(400).json({
+      success: false,
+      message: 'Invalid JSON payload format',
+      code: ERROR_CODE.VALIDATION_ERROR,
+    });
+    return;
+  }
+
+  // Handle URIError / 400 Bad Request (Malformed URI encoding in URL)
+  if (error instanceof URIError) {
+    res.status(400).json({
+      success: false,
+      message: 'Malformed URI encoding in request URL',
+      code: ERROR_CODE.VALIDATION_ERROR,
     });
     return;
   }

@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import crypto from 'crypto';
 import { StatementExportFormat } from '@prisma/client';
 import { AppError } from '../../common/errors/app-error';
 import { ERROR_CODE } from '../../common/errors/error-code';
@@ -38,7 +39,8 @@ export class StatementService {
       throw new AppError('Invalid date range', 400, ERROR_CODE.STATEMENT_DATE_RANGE_INVALID);
     }
 
-    const verificationCode = `FW-${uuidv7().toUpperCase().replace(/-/g, '').slice(0, 16)}`;
+    // SEC-W3-05: Cryptographically strong CSPRNG verification code (prevent timestamp-based enumeration)
+    const verificationCode = `FW-${crypto.randomBytes(8).toString('hex').toUpperCase()}`;
     const format = dto.format as StatementExportFormat;
 
     const job = await this.repository.create({

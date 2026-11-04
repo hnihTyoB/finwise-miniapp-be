@@ -307,11 +307,53 @@ export async function safeFetch(
 
       // Resolve relative or absolute redirect URL
       const nextUrl = new URL(location, currentUrl).toString();
+      const nextParsed = new URL(nextUrl);
+      if (nextParsed.origin !== validated.origin) {
+        // Strip sensitive signature/auth headers when redirected across different origins
+        delete headers['X-FinWise-Signature'];
+        delete headers['x-finwise-signature'];
+        delete headers['Authorization'];
+        delete headers['authorization'];
+      }
       currentUrl = nextUrl;
       continue;
     }
 
-    const responseBody = await response.text();
+    // Defense against Memory Exhaustion (OOM DoS): Limit incoming response body to max 64KB
+    const MAX_RESPONSE_BYTES = 64 * 1024;
+    let responseBody = '';
+
+    if (response.body && typeof (response.body as any).getReader === 'function') {
+      const reader = (response.body as any).getReader();
+      let bytesRead = 0;
+      const chunks: Uint8Array[] = [];
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) {
+            bytesRead += value.length;
+            if (bytesRead > MAX_RESPONSE_BYTES) {
+              const allowedLength = value.length - (bytesRead - MAX_RESPONSE_BYTES);
+              if (allowedLength > 0) {
+                chunks.push(value.slice(0, allowedLength));
+              }
+              await reader.cancel();
+              break;
+            }
+            chunks.push(value);
+          }
+        }
+      } catch (_err) {
+        // Stream reading completed or aborted
+      }
+
+      const totalBuffer = Buffer.concat(chunks.map((c) => Buffer.from(c)));
+      responseBody = totalBuffer.toString('utf-8');
+    } else if (typeof response.text === 'function') {
+      responseBody = (await response.text()).slice(0, MAX_RESPONSE_BYTES);
+    }
     const responseHeaders: Record<string, string> = {};
     response.headers.forEach((val, key) => {
       responseHeaders[key.toLowerCase()] = val;

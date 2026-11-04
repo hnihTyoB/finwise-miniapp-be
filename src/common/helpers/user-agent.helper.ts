@@ -2,14 +2,16 @@ import crypto from 'crypto';
 
 /**
  * Parses raw User-Agent string to a friendly format (e.g. Chrome trên Windows)
+ * Áp dụng giới hạn độ dài ký tự chống cạn kiệt bộ nhớ / CPU.
  */
 export function parseUserAgent(uaString: string | undefined): string {
-  if (!uaString) return 'Thiết bị không xác định';
+  if (!uaString || typeof uaString !== 'string') return 'Thiết bị không xác định';
 
+  const boundedUa = uaString.slice(0, 512);
   let os = 'Hệ điều hành không xác định';
   let browser = 'Trình duyệt không xác định';
 
-  const uaLower = uaString.toLowerCase();
+  const uaLower = boundedUa.toLowerCase();
 
   // Parse OS
   if (uaLower.includes('windows')) {
@@ -43,9 +45,9 @@ export function parseUserAgent(uaString: string | undefined): string {
 }
 
 /**
- * Generates MD5 hash from raw User-Agent string
+ * Sinh Device Hash từ raw User-Agent string bằng SHA-256 thay thế MD5 đã lỗi thời.
  */
 export function generateDeviceHash(uaString: string | undefined): string {
-  const cleanUa = uaString || 'unknown';
-  return crypto.createHash('md5').update(cleanUa).digest('hex');
+  const cleanUa = typeof uaString === 'string' ? uaString.slice(0, 512) : 'unknown';
+  return crypto.createHash('sha256').update(cleanUa).digest('hex').slice(0, 32);
 }

@@ -17,8 +17,13 @@ export class ZaloBotLinkService {
     expiresInSeconds: number;
     deepLinkInstruction: string;
   }> {
-    // Tạo mã ngẫu nhiên 4 ký tự chữ số/in hoa
-    const randomPart = crypto.randomBytes(3).toString('hex').slice(0, 4).toUpperCase();
+    // Tạo mã ngẫu nhiên 6 ký tự Alphanumeric an toàn cao (32^6 = 1,073,741,824 khả năng)
+    const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const bytes = crypto.randomBytes(6);
+    let randomPart = '';
+    for (let i = 0; i < 6; i++) {
+      randomPart += chars[bytes[i] % chars.length];
+    }
     const linkCode = `FW-${randomPart}`;
     const ttlSeconds = envConfig.zaloBot.linkCodeTtlSeconds;
 
@@ -49,6 +54,13 @@ export class ZaloBotLinkService {
     reason?: string;
     userName?: string;
   }> {
+    const attemptsKey = `zalo:link:attempts:${chatId}`;
+    const attempts = (await cacheService.get<number>(attemptsKey)) || 0;
+    if (attempts >= 5) {
+      this.logger.warn(`Rate limit exceeded for chatId ${chatId} on link code verification`);
+      return { success: false, reason: 'TOO_MANY_FAILED_ATTEMPTS' };
+    }
+
     const cleanCode = inputCode.trim().toUpperCase();
     const userId = await cacheService.get<string>(`zalo:link:code:${cleanCode}`);
 
@@ -57,11 +69,14 @@ export class ZaloBotLinkService {
       const rawCode = cleanCode.replace(/[^A-Z0-9]/g, '');
       const fallbackUserId = await cacheService.get<string>(`zalo:link:code:${rawCode}`);
       if (!fallbackUserId) {
+        await cacheService.set(attemptsKey, attempts + 1, 900); // Khóa 15 phút
         return { success: false, reason: 'INVALID_OR_EXPIRED_CODE' };
       }
+      await cacheService.del(attemptsKey);
       return this.consumeCodeForUser(fallbackUserId, cleanCode, chatId, displayName);
     }
 
+    await cacheService.del(attemptsKey);
     return this.consumeCodeForUser(userId, cleanCode, chatId, displayName);
   }
 

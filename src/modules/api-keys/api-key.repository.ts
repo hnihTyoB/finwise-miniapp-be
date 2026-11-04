@@ -37,6 +37,16 @@ export class ApiKeyRepository {
     });
   }
 
+  async countActiveByUserId(userId: string): Promise<number> {
+    return prisma.apiKey.count({
+      where: {
+        userId,
+        status: ApiKeyStatus.ACTIVE,
+        deletedAt: null,
+      },
+    });
+  }
+
   async findByIdAndUserId(id: string, userId: string): Promise<ApiKey | null> {
     return prisma.apiKey.findFirst({
       where: {

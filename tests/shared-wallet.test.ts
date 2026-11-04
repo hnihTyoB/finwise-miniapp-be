@@ -66,17 +66,18 @@ describe('Shared Wallets & Family Budget Integration Tests', () => {
       .send({ email: memberUser.email, password: memberUser.password });
     memberToken = memberLogin.body.data.accessToken;
 
-    // Get an expense category
+    // Get an expense category (system category so all users/members can use it)
     let category = await prisma.category.findFirst({
-      where: { type: 'EXPENSE' },
+      where: { type: 'EXPENSE', isSystem: true },
     });
     if (!category) {
       category = await prisma.category.create({
         data: {
-          name: 'Ăn uống test',
+          name: 'Ăn uống test shared',
           type: 'EXPENSE',
           icon: 'food',
           color: '#F59E0B',
+          isSystem: true,
         },
       });
     }

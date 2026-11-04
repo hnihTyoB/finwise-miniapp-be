@@ -18,6 +18,17 @@ export class WebhookService {
   private readonly repository = new WebhookRepository();
 
   async createEndpoint(userId: string, data: CreateWebhookDto): Promise<CreateWebhookResponseDto> {
+    // Quota Enforcement: Limit active webhook endpoints per user to prevent queue flooding / amplification DoS
+    const MAX_WEBHOOKS_PER_USER = 10;
+    const activeCount = await this.repository.countActiveByUserId(userId);
+    if (activeCount >= MAX_WEBHOOKS_PER_USER) {
+      throw new AppError(
+        `Exceeded maximum allowed active webhook endpoints (${MAX_WEBHOOKS_PER_USER})`,
+        400,
+        ERROR_CODE.VALIDATION_ERROR,
+      );
+    }
+
     // Validate target URL via DNS to reject private IP domains
     await validateUrlAsync(data.url);
 

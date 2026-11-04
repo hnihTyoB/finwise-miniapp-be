@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { envConfig } from '../config/env.config';
 import { cacheService } from '../common/services/cache.service';
 import { ERROR_CODE } from '../common/errors/error-code';
+import { MAX_RATE_LIMIT_ENTRIES, pruneRateLimitMap } from './rate-limit.middleware';
 
 interface RateLimitRecord {
   count: number;
@@ -34,13 +35,25 @@ export async function apiKeyRateLimitMiddleware(
   if (isUsingRedis && redisClient) {
     try {
       const redisKey = `finwise:api-key-rate-limit:${apiKeyId}`;
-      const currentCount = await redisClient.incr(redisKey);
+      const results = await redisClient
+        .pipeline()
+        .incr(redisKey)
+        .pttl(redisKey)
+        .exec();
 
-      if (currentCount === 1) {
-        await redisClient.pexpire(redisKey, windowMs);
+      if (!results || results[0][0] || results[1][0]) {
+        throw new Error('Redis pipeline API key rate limit failed');
       }
 
-      const ttlMs = await redisClient.pttl(redisKey);
+      const currentCount = results[0][1] as number;
+      let ttlMs = results[1][1] as number;
+
+      // SEC-W0-01: Ensure TTL is always set on first request or recovered if key lacks TTL
+      if (currentCount === 1 || ttlMs < 0) {
+        await redisClient.pexpire(redisKey, windowMs);
+        ttlMs = windowMs;
+      }
+
       const remaining = Math.max(0, maxRequests - currentCount);
       const resetTimeSeconds = Math.ceil((now + ttlMs) / 1000);
 
@@ -66,13 +79,9 @@ export async function apiKeyRateLimitMiddleware(
     }
   }
 
-  // Memory-safe sliding window rate limit fallback
-  if (now - lastCleanupAt >= windowMs) {
-    keyCounts.forEach((record, key) => {
-      if (now >= record.resetAt) {
-        keyCounts.delete(key);
-      }
-    });
+  // SEC-W0-06: Memory-safe sliding window rate limit fallback with strict cardinality bound
+  if (now - lastCleanupAt >= windowMs || keyCounts.size >= MAX_RATE_LIMIT_ENTRIES) {
+    pruneRateLimitMap(keyCounts, now);
     lastCleanupAt = now;
   }
 
